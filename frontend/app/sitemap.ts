@@ -10,6 +10,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/architecture",
     "/privacy/U-00001",
     "/glossary",
+    "/paypal",
+    "/agent",
   ];
   return routes.map((route) => ({
     url: `${SITE_URL}${route}`,

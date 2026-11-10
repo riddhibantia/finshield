@@ -81,6 +81,8 @@ function NavHeader({ metrics, health }: { metrics?: any; health?: any }) {
           <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/architecture">Architecture</Link>
           <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/privacy/U-00001">Privacy</Link>
           <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/glossary">Glossary</Link>
+          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">PayPal Shield</Link>
+          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/agent">Agent</Link>
         </nav>
 
         <div className="flex items-center gap-2.5">
@@ -273,6 +275,8 @@ export function LandingPage() {
               <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/architecture">Architecture</Link>
               <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/privacy/U-00001">Privacy</Link>
               <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/glossary">Glossary</Link>
+          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">PayPal Shield</Link>
+          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/agent">Agent</Link>
             </nav>
 
             <div className="flex items-center gap-3">
@@ -769,6 +773,8 @@ export function CommandCenter() {
               <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/architecture">Architecture</Link>
               <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/privacy/U-00001">Privacy</Link>
               <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/glossary">Glossary</Link>
+          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">PayPal Shield</Link>
+          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/agent">Agent</Link>
             </nav>
 
             <div className="flex items-center gap-2.5">

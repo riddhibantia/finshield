@@ -321,6 +321,22 @@ async function req(path: string, init?: RequestInit) {
       clientStore = clientStore.slice(0, 5);
       return { ok: true };
     }
+    if (path === "/api/paypal/config") {
+      // Honest offline state — never fake a PayPal order id.
+      return { environment: "offline", sdk_url: "", client_id: "", enabled: false };
+    }
+    if (path === "/api/paypal/disputes" || path.startsWith("/api/paypal/intents")) {
+      return { disputes: [], intents: [] };
+    }
+    if (path === "/api/agent/health") {
+      return { llm_configured: false, source: "DEMO_FALLBACK", offline: true };
+    }
+    if (path === "/api/agent/chat") {
+      return { reply: "API offline — deterministic simulated reply (no live agent behind this page right now).", tool_trace: [], source: "DEMO_FALLBACK" };
+    }
+    if (path.startsWith("/api/agent/actions")) {
+      return { actions: [] };
+    }
     return {};
   }
 }
@@ -341,6 +357,34 @@ export const api = {
     req(`/api/webhooks/cashfree/simulate?amount=${params.amount}&status=${params.status || "SUCCESS"}&upi_id=${encodeURIComponent(params.upi_id || "riddhi@okhdfcbank")}`, { method: "POST" }),
   identity: (uid: string) => req(`/api/identity/${uid}`),
   reset: () => req("/api/demo/reset", { method: "POST" }),
+
+  // ---- PayPal fulfilment shield ----
+  paypalConfig: () => req("/api/paypal/config"),
+  paypalCreateOrder: (body: { scenario: string; amount?: string; currency?: string; device_id?: string; email?: string }) =>
+    req("/api/paypal/orders", { method: "POST", body: JSON.stringify(body) }),
+  paypalAuthorize: (orderId: string, body: { device_id?: string; email_hash?: string } = {}) =>
+    req(`/api/paypal/orders/${orderId}/authorize`, { method: "POST", body: JSON.stringify(body) }),
+  paypalIntents: () => req("/api/paypal/intents"),
+  paypalIntent: (id: string) => req(`/api/paypal/intents/${id}`),
+  paypalVerifyOtp: (intentId: string, otp: string) =>
+    req(`/api/paypal/intents/${intentId}/verify`, { method: "POST", body: JSON.stringify({ otp }) }),
+  paypalApprove: (intentId: string, action: "capture" | "void", approved_by = "analyst") =>
+    req(`/api/paypal/intents/${intentId}/approve`, { method: "POST", body: JSON.stringify({ action, approved_by }) }),
+  paypalDisputes: () => req("/api/paypal/disputes"),
+  paypalSimulateDispute: (body: { intent_id?: string } = {}) =>
+    req("/api/paypal/disputes/simulate", { method: "POST", body: JSON.stringify(body) }),
+  paypalDraftEvidence: (disputeId: string) =>
+    req(`/api/paypal/disputes/${disputeId}/draft`, { method: "POST" }),
+
+  // ---- analyst agent ----
+  agentHealth: () => req("/api/agent/health"),
+  agentChat: (message: string, history: { role: string; content: string }[] = []) =>
+    req("/api/agent/chat", { method: "POST", body: JSON.stringify({ message, history }) }),
+  agentActions: (status?: string) => req(`/api/agent/actions${status ? `?status=${status}` : ""}`),
+  agentApprove: (actionId: string, approved_by = "analyst") =>
+    req(`/api/agent/actions/${actionId}/approve`, { method: "POST", body: JSON.stringify({ approved_by }) }),
+  agentReject: (actionId: string, approved_by = "analyst") =>
+    req(`/api/agent/actions/${actionId}/reject`, { method: "POST", body: JSON.stringify({ approved_by }) }),
 };
 
 export type Score = {
