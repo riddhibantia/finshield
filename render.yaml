@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: finshield-api
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements-api.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: PAYPAL_ENV
+        value: sandbox
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: FINSHEILD_CORS_ORIGINS
+        value: https://finshield-demo.vercel.app
+      - key: FINSHEILD_DB_PATH
+        value: /tmp/finshield.db
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
