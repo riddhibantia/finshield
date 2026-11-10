@@ -161,11 +161,13 @@ def create_order(
     description: str = "",
     custom_id: str = "",
     invoice_id: str = "",
+    application_context: dict[str, Any] | None = None,
     cfg: PayPalConfig | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> dict[str, Any]:
     """Create an order. intent=AUTHORIZE locks funds at buyer approval; we
-    capture/void later based on the risk decision."""
+    capture/void later based on the risk decision. application_context carries
+    return/cancel URLs for the redirect approval flow."""
     unit: dict[str, Any] = {"amount": {"currency_code": currency.upper(), "value": amount}}
     if description:
         unit["description"] = description[:127]
@@ -173,7 +175,15 @@ def create_order(
         unit["custom_id"] = custom_id[:127]
     if invoice_id:
         unit["invoice_id"] = invoice_id[:127]
-    body = {"intent": intent.upper(), "purchase_units": [unit]}
+    body: dict[str, Any] = {"intent": intent.upper(), "purchase_units": [unit]}
+    ctx = application_context or {}
+    if ctx.get("return_url"):
+        body["application_context"] = {
+            "user_action": ctx.get("user_action", "PAY_NOW"),
+            "shipping_preference": ctx.get("shipping_preference", "NO_SHIPPING"),
+            "return_url": ctx["return_url"],
+            "cancel_url": ctx.get("cancel_url") or ctx["return_url"],
+        }
     return _request(
         "POST",
         "/v2/checkout/orders",

@@ -92,6 +92,27 @@ export function PayPalShield() {
     setIntents((data.intents || []).slice(0, 8));
   }, []);
 
+  // Redirect-return: PayPal bounces back here with ?token=<order_id>&PayerID=...
+  // after the buyer pays — auto-run the authorization gate immediately.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const returnedToken = params.get("token");
+    if (!returnedToken) return;
+    window.history.replaceState({}, "", "/paypal");
+    setBusy(true);
+    (async () => {
+      try {
+        const d = (await api.paypalAuthorize(returnedToken, { device_id: "DEV-KNOWN-PAYPAL" })) as DecisionData;
+        setDecision(d);
+        refreshIntents();
+      } catch (e) {
+        setErr(String(e));
+      }
+      setBusy(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     (async () => {
       const c = (await api.paypalConfig()) as PayPalConfigData;
@@ -161,14 +182,18 @@ export function PayPalShield() {
         scenario,
         amount: customAmount || undefined,
         currency: "USD",
-      })) as { paypal_order_id: string; amount: string; currency: string };
+        return_url: `${window.location.origin}/paypal`,
+      })) as { paypal_order_id: string; amount: string; currency: string; approve_url?: string };
       setOrder(o);
+      if (o.approve_url) {
+        // Redirect approval (Orders v2 approve link, same tab) — works in every
+        // browser; PayPal returns to /paypal?token=<order_id> and the gate runs.
+        window.location.href = o.approve_url;
+        return;
+      }
       if (sessionRef.current) {
-        // SDK v6 expects an order-creation CALLBACK (async fn returning the id),
-        // not a bare promise — passing a promise leaves the popup spinning.
         await sessionRef.current.start({ presentationMode: "auto" }, async () => o.paypal_order_id);
       } else {
-        // stub / offline mode: no popup — straight to the authorization gate
         await finish();
       }
     } catch (e) {

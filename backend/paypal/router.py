@@ -51,6 +51,7 @@ class OrderRequest(BaseModel):
     user_id: str | None = None
     device_id: str | None = None
     email: str | None = None
+    return_url: str | None = None
 
 
 class VerifyRequest(BaseModel):
@@ -160,6 +161,12 @@ def create_order(body: OrderRequest):
             intent="AUTHORIZE",
             description=f"FinShield digital good ({base['label']})",
             custom_id=f"finshield-{scenario}",
+            application_context={
+                "user_action": "PAY_NOW",
+                "shipping_preference": "NO_SHIPPING",
+                "return_url": body.return_url or "",
+                "cancel_url": (body.return_url or "").split("?")[0] if body.return_url else "",
+            },
         )
     except pp.PayPalError as e:
         raise HTTPException(status_code=502, detail=f"PayPal order create failed: {e.message} (debug {e.debug_id})")
@@ -177,6 +184,7 @@ def create_order(body: OrderRequest):
         "created_at": now_iso(),
     }
     store.save_intent(record)
+    approve_url = next((l["href"] for l in order.get("links", []) if l.get("rel") == "approve"), "")
     return {
         "intent_id": intent_id,
         "paypal_order_id": order["id"],
@@ -186,6 +194,7 @@ def create_order(body: OrderRequest):
         "scenario": scenario,
         "scenario_label": base["label"],
         "intent": "AUTHORIZE",
+        "approve_url": approve_url,
     }
 
 
