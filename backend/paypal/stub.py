@@ -132,7 +132,17 @@ def handle(method: str, path: str, *, json_body: dict[str, Any] | None, params: 
     m = re.match(r"^/v1/customer/disputes/([^/]+)$", path)
     if method == "GET" and m:
         _seed_disputes()
-        return _disputes[m.group(1)]
+        known = _disputes.get(m.group(1))
+        if known:
+            return known
+        return {
+            "dispute_id": m.group(1),
+            "status": "WAITING_FOR_SELLER_RESPONSE",
+            "dispute_state": "WAITING_FOR_SELLER_RESPONSE",
+            "reason": "MERCHANDISE_NOT_RECEIVED",
+            "disputed_amount": {"currency_code": "USD", "value": "220.00"},
+            "stub": True,
+        }
 
     m = re.match(r"^/v1/customer/disputes/([^/]+)/provide-evidence$", path)
     if method == "POST" and m:
