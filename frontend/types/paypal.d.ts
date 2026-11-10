@@ -4,7 +4,7 @@ export {};
 
 declare global {
   interface PayPalOneTimePaymentSession {
-    start(presentationMode: Record<string, unknown>, createOrderPromise: Promise<string>): Promise<unknown>;
+    start(presentationMode: Record<string, unknown>, createOrder: () => Promise<string> | string): Promise<unknown>;
     destroy?(): Promise<void>;
   }
 
