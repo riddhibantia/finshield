@@ -339,3 +339,30 @@ input:focus, select:focus {
   color: #F2EFE7;
   border-top: 1px solid #62665F;
 }
+
+/* ---- FinShield decision-panel motion system ---- */
+@keyframes fin-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fin-fade-up { animation: fin-fade-up .38s ease-out both; }
+
+@keyframes fin-stamp-in {
+  0% { opacity: 0; transform: scale(1.7) rotate(-14deg); }
+  60% { opacity: 1; transform: scale(.92) rotate(-7deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-7deg); }
+}
+.fin-stamp { animation: fin-stamp-in .5s cubic-bezier(.2,.8,.3,1.15) both; }
+
+@keyframes fin-bar-grow { from { width: 0; } }
+.fin-bar { animation: fin-bar-grow .8s cubic-bezier(.2,.8,.2,1) both; }
+
+@keyframes fin-shimmer { 0% { background-position: -320px 0; } 100% { background-position: 320px 0; } }
+.fin-skeleton {
+  background: linear-gradient(90deg, #E7E4DB 25%, #F2EFE7 50%, #E7E4DB 75%);
+  background-size: 640px 100%;
+  animation: fin-shimmer 1.15s linear infinite;
+}
+
+@keyframes fin-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.fin-pulse { animation: fin-pulse 1.4s ease-in-out infinite; }
