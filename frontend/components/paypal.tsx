@@ -164,7 +164,9 @@ export function PayPalShield() {
       })) as { paypal_order_id: string; amount: string; currency: string };
       setOrder(o);
       if (sessionRef.current) {
-        await sessionRef.current.start({ presentationMode: "auto" }, Promise.resolve(o.paypal_order_id));
+        // SDK v6 expects an order-creation CALLBACK (async fn returning the id),
+        // not a bare promise — passing a promise leaves the popup spinning.
+        await sessionRef.current.start({ presentationMode: "auto" }, async () => o.paypal_order_id);
       } else {
         // stub / offline mode: no popup — straight to the authorization gate
         await finish();
