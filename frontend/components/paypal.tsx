@@ -85,7 +85,7 @@ export function PayPalShield() {
   const [err, setErr] = useState("");
   const [otp, setOtp] = useState("");
   const [intents, setIntents] = useState<IntentRow[]>([]);
-  const sessionRef = useRef<{ start: (mode: Record<string, unknown>, orderPromise: Promise<string>) => Promise<unknown> } | null>(null);
+  const sessionRef = useRef<{ start: (mode: Record<string, unknown>, createOrder: () => Promise<string> | string) => Promise<unknown> } | null>(null);
 
   const refreshIntents = useCallback(async () => {
     const data = (await api.paypalIntents()) as { intents?: IntentRow[] };
