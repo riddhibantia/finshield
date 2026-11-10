@@ -360,7 +360,7 @@ export const api = {
 
   // ---- PayPal fulfilment shield ----
   paypalConfig: () => req("/api/paypal/config"),
-  paypalCreateOrder: (body: { scenario: string; amount?: string; currency?: string; device_id?: string; email?: string }) =>
+  paypalCreateOrder: (body: { scenario: string; amount?: string; currency?: string; device_id?: string; email?: string; return_url?: string }) =>
     req("/api/paypal/orders", { method: "POST", body: JSON.stringify(body) }),
   paypalAuthorize: (orderId: string, body: { device_id?: string; email_hash?: string } = {}) =>
     req(`/api/paypal/orders/${orderId}/authorize`, { method: "POST", body: JSON.stringify(body) }),
