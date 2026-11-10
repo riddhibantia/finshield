@@ -20,17 +20,22 @@ def get_ml_repo_root() -> Path:
         if sibling.exists() and (sibling / "models").exists():
             return sibling
 
-    # 3. Check two levels up (in case running inside monorepo)
+    # 3. Check the repo root this backend/ lives in (monorepo layout)
+    repo_root = Path(__file__).resolve().parents[1]
+    if (repo_root / "models").exists():
+        return repo_root
+
+    # 4. Check two levels up (backend nested one dir deeper)
     parent_two = Path(__file__).resolve().parents[2]
     if (parent_two / "models").exists():
         return parent_two
 
-    # 4. Check three levels up
+    # 5. Check three levels up
     parent_three = Path(__file__).resolve().parents[3]
     if (parent_three / "models").exists():
         return parent_three
 
-    return parent_two
+    return repo_root
 
 ML_REPO_ROOT = get_ml_repo_root()
 
