@@ -14,7 +14,7 @@ const BORDER = "#D8D4CA";
 function PageHeader({ badge, title, sub }: { badge: string; title: string; sub: string }) {
   return (
     <div className="border-b border-[#D8D4CA] pb-3">
-      <Link href="/command-center" className="font-mono text-[10px] text-[#555951] hover:text-[#FF5B35]">
+      <Link href="/command-center" className="mb-2 block w-fit font-mono text-[10px] text-[#555951] hover:text-[#FF5B35]">
         ← Command Center
       </Link>
       <span className="badge-pill mb-1 inline-block">{badge}</span>
