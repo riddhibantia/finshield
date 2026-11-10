@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import math
 
+from ..currency import engine_amount, format_amount
 from ..schemas import ScoreResult, Signal, Transaction
 
 
@@ -35,6 +36,8 @@ class MockMLAdapter:
         scenario = ctx.get("scenario", "normal")
 
         amt = float(getattr(txn, "amount", 0) or 0)
+        currency = str(getattr(txn, "currency", "INR") or "INR").upper()
+        amt_engine = engine_amount(amt, currency)  # rule thresholds are INR-scale
         usual_amt = float(getattr(txn, "usual_amount", 0) or ctx.get("usual_amount", 3800.0) or 3800.0)
         amt_dev = float(ctx.get("amount_deviation", amt / usual_amt if usual_amt > 0 else 1.0))
         vel = float(txn.velocity or ctx.get("recent_transaction_count", 1) or 1)
@@ -57,25 +60,25 @@ class MockMLAdapter:
         if is_shared or scenario == "fraud_ring":
             rules.append("SHARED_DEVICE_MULTI_ACCOUNT")
             evidence.append(f"Device fingerprint ({txn.device_id}) linked to multiple distinct accounts")
-        elif is_new_device and amt > 500:
+        elif is_new_device and amt_engine > 500:
             rules.append("NEW_DEVICE_HIGH_VALUE")
-            evidence.append(f"High-value payment (${amt:,.2f}) on newly registered device")
+            evidence.append(f"High-value payment ({format_amount(amt, currency)}) on newly registered device")
         elif is_new_device:
             rules.append("NEW_DEVICE")
             evidence.append(f"New unrecognized device ({txn.device_id})")
 
-        if amt_dev >= 3.0 or amt >= 3.0 * usual_amt:
+        if amt_dev >= 3.0 or amt_engine >= 3.0 * usual_amt:
             rules.append("UNUSUAL_AMOUNT")
-            evidence.append(f"Amount deviation: ${amt:,.2f} is {amt_dev:.1f}× usual baseline (${usual_amt:,.2f})")
+            evidence.append(f"Amount deviation: {format_amount(amt, currency)} is {amt_dev:.1f}× usual baseline ({format_amount(usual_amt, currency)})")
 
         if dist_km >= 300 or "foreign" in loc:
             rules.append("UNUSUAL_LOCATION")
             evidence.append(f"Geographic jump: location is ~{int(dist_km or 400)}km from home")
 
-        if amt >= 100000:
+        if amt_engine >= 100000:
             rules.append("UPI_HIGH_VALUE_ANOMALY")
             rules.append("EXCEEDS_SINGLE_TRANSACTION_LIMIT")
-            evidence.append(f"High-Value Anomaly: ₹{amt:,.2f} exceeds standard single-transaction threshold (₹1 Lakh)")
+            evidence.append(f"High-Value Anomaly: {format_amount(amt, currency)} exceeds standard single-transaction threshold")
 
         if scenario == "suspicious" and not rules:
             rules = ["NEW_DEVICE_HIGH_VALUE", "HIGH_VELOCITY"]
@@ -94,12 +97,12 @@ class MockMLAdapter:
             evidence = ["Device matches historical profile", "Amount within usual range"]
 
         base = {"normal": 0.08, "suspicious": 0.91, "fraud_ring": 0.87, "ambiguous": 0.55}.get(scenario, 0.15)
-        if amt >= 100000:
+        if amt_engine >= 100000:
             base = 0.92
-        elif amt <= 500 and vel < 5 and not is_shared:
+        elif amt_engine <= 500 and vel < 5 and not is_shared:
             base = 0.03
             rules = []
-            evidence = [f"Everyday transaction (₹{amt:,.2f}) verified safe", "Payment within normal UPI limits"]
+            evidence = [f"Everyday transaction ({format_amount(amt, currency)}) verified safe", "Payment within expected parameters"]
         elif len(rules) >= 2 or is_shared or (is_new_device and amt_dev > 3.0):
             base = max(base, 0.82)
         elif len(rules) == 1:

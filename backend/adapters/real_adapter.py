@@ -10,6 +10,7 @@ import joblib
 import numpy as np
 
 from ..config import ML_REPO_ROOT
+from ..currency import engine_amount, format_amount
 from ..schemas import ScoreResult, Signal
 
 REPO_ROOT = ML_REPO_ROOT
@@ -87,7 +88,9 @@ def _build_feature_vector(txn, ctx: dict) -> np.ndarray:
     cols = _feature_cols or []
     feat: dict = {}
     amt = float(getattr(txn, "amount", 0) or 0)
-    amt_capped = min(amt, 2000.0)
+    currency = str(getattr(txn, "currency", "INR") or "INR").upper()
+    amt_engine = engine_amount(amt, currency)  # engine thresholds are INR-scale
+    amt_capped = min(amt_engine, 2000.0)
     feat["amount_log"] = float(np.log1p(amt_capped))
     ts_str = str(getattr(txn, "timestamp", ""))
     try:
@@ -100,7 +103,7 @@ def _build_feature_vector(txn, ctx: dict) -> np.ndarray:
     feat["hour"] = float(hour)
     feat["day_of_week"] = float(dow)
     feat["is_offhours"] = 1.0 if hour in (0, 1, 2, 3, 4, 5) else 0.0
-    feat["is_high_value"] = 1.0 if amt > 10000 else 0.0
+    feat["is_high_value"] = 1.0 if amt_engine > 10000 else 0.0
     cat = str(getattr(txn, "merchant_category", "everyday")).lower()
     feat["is_online"] = 1.0 if cat in ("electronics", "ecommerce", "retail", "crypto") else 0.0
     feat["is_pos"] = 1.0 if cat in ("everyday", "dining", "fuel") else 0.0
@@ -125,12 +128,12 @@ def _build_feature_vector(txn, ctx: dict) -> np.ndarray:
 
     vel = float(getattr(txn, "velocity", 0) or ctx.get("recent_transaction_count", 1) or 1)
     feat["vel_count_300s"] = float(vel) if vel >= 4 else 0.0
-    feat["vel_amount_300s"] = float(amt * 0.3) if vel >= 4 else 0.0
+    feat["vel_amount_300s"] = float(amt_engine * 0.3) if vel >= 4 else 0.0
     feat["vel_count_3600s"] = float(max(vel, 3))
-    feat["vel_amount_3600s"] = float(amt * 0.5)
+    feat["vel_amount_3600s"] = float(amt_engine * 0.5)
     feat["vel_count_86400s"] = float(vel + 5)
-    feat["vel_amount_86400s"] = float(amt * 1.2)
-    feat["vel_high_value_count_3600s"] = 1.0 if amt > 10000 and vel >= 3 else 0.0
+    feat["vel_amount_86400s"] = float(amt_engine * 1.2)
+    feat["vel_high_value_count_3600s"] = 1.0 if amt_engine > 10000 and vel >= 3 else 0.0
 
     dev = str(getattr(txn, "device_id", "")).upper()
     is_new = 1.0 if ("NEW" in dev or getattr(txn, "is_new_device", False)) else 0.0
@@ -177,6 +180,8 @@ class RealMLAdapter:
             xgb_prob = float(_model.predict(X)[0])
 
         amt = float(getattr(txn, "amount", 0) or 0)
+        currency = str(getattr(txn, "currency", "INR") or "INR").upper()
+        amt_engine = engine_amount(amt, currency)  # rule thresholds are INR-scale
         usual_amt = float(getattr(txn, "usual_amount", 0) or ctx.get("usual_amount", 3800.0) or 3800.0)
         amt_dev = float(ctx.get("amount_deviation", amt / usual_amt if usual_amt > 0 else 1.0))
         vel = float(getattr(txn, "velocity", 0) or ctx.get("recent_transaction_count", 1) or 1)
@@ -208,31 +213,31 @@ class RealMLAdapter:
         if is_shared or scenario == "fraud_ring":
             rules.append("SHARED_DEVICE_MULTI_ACCOUNT")
             evidence.append(f"Hardware fingerprint ({txn.device_id}) linked to multiple distinct accounts (Mule Ring)")
-        elif is_new_device and amt > 500:
+        elif is_new_device and amt_engine > 500:
             rules.append("NEW_DEVICE_HIGH_VALUE")
-            evidence.append(f"High-value payment (${amt:,.2f}) initiated from newly registered device ({txn.device_id})")
+            evidence.append(f"High-value payment ({format_amount(amt, currency)}) initiated from newly registered device ({txn.device_id})")
         elif is_new_device:
             rules.append("NEW_DEVICE")
             evidence.append(f"Payment made from unrecognized device ({txn.device_id})")
 
-        if amt_dev >= 3.0 or amt >= 3.0 * usual_amt:
+        if amt_dev >= 3.0 or amt_engine >= 3.0 * usual_amt:
             rules.append("UNUSUAL_AMOUNT")
-            evidence.append(f"Amount deviation: ${amt:,.2f} is {amt_dev:.1f}× higher than typical baseline (${usual_amt:,.2f})")
+            evidence.append(f"Amount deviation: {format_amount(amt, currency)} is {amt_dev:.1f}× higher than typical baseline ({format_amount(usual_amt, currency)})")
 
-        if hour in (0, 1, 2, 3, 4, 5) and amt > 1000:
+        if hour in (0, 1, 2, 3, 4, 5) and amt_engine > 1000:
             rules.append("OFFHOURS_HIGH_VALUE")
-            evidence.append(f"Off-hours high-value transaction (${amt:,.2f} at {hour:02d}:00 local time)")
+            evidence.append(f"Off-hours high-value transaction ({format_amount(amt, currency)} at {hour:02d}:00 local time)")
 
-        if amt >= 100000:
+        if amt_engine >= 100000:
             rules.append("UPI_HIGH_VALUE_ANOMALY")
             rules.append("EXCEEDS_SINGLE_TRANSACTION_LIMIT")
-            evidence.append(f"High-Value Anomaly: ₹{amt:,.2f} exceeds standard single-transaction threshold (₹1 Lakh)")
+            evidence.append(f"High-Value Anomaly: {format_amount(amt, currency)} exceeds standard single-transaction threshold")
 
         if dist_km >= 300 or "foreign" in loc or "abroad" in loc:
             rules.append("UNUSUAL_LOCATION")
             evidence.append(f"Geographic jump: payment location is ~{int(dist_km or 400)}km from primary residence")
 
-        if cat in ("crypto", "gambling", "electronics") and amt > 2500:
+        if cat in ("crypto", "gambling", "electronics") and amt_engine > 2500:
             rules.append("HIGH_RISK_MERCHANT_CATEGORY")
             evidence.append(f"High-risk merchant sector ({cat.title()}) with substantial amount")
 
@@ -277,12 +282,12 @@ class RealMLAdapter:
             0.15 * behavioral +
             0.10 * graph
         )
-        if amt >= 100000:
+        if amt_engine >= 100000:
             fused = max(fused, 0.89)
-        elif amt <= 500 and vel < 5 and not is_shared:
+        elif amt_engine <= 500 and vel < 5 and not is_shared:
             fused = min(fused, 0.035)
             rules = []
-            evidence = [f"Everyday transaction (₹{amt:,.2f}) verified safe", "Amount and velocity within standard UPI parameters"]
+            evidence = [f"Everyday transaction ({format_amount(amt, currency)}) verified safe", "Amount and velocity within expected parameters"]
         elif len(rules) >= 2 or is_shared or (is_new_device and amt_dev > 3.0):
             fused = max(fused, 0.72)
         elif len(rules) == 1:

@@ -38,6 +38,7 @@ class Transaction(BaseModel):
     transaction_id: str
     user_id: str
     amount: float
+    currency: str = "INR"
     timestamp: str
     merchant: str
     merchant_category: str
