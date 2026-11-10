@@ -147,6 +147,9 @@ def _request(
         except Exception:
             message = resp.text[:200]
         raise PayPalError(resp.status_code, message, debug_id)
+    if resp.status_code == 204 or not resp.content:
+        # void (and a few other endpoints) answer 204 No Content — there is no JSON body
+        return {"status": "VOIDED" if "/void" in path else "OK"}
     return resp.json()
 
 
