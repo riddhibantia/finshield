@@ -76,13 +76,9 @@ function NavHeader({ metrics, health }: { metrics?: any; health?: any }) {
         </div>
 
         <nav className="hidden md:flex items-center gap-6">
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/">Command Center</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/performance">Observatory</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/architecture">Architecture</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/privacy/U-00001">Privacy</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/glossary">Glossary</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">PayPal Shield</Link>
+          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">Live Demo</Link>
           <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/agent">Agent</Link>
+          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/command-center">Console</Link>
         </nav>
 
         <div className="flex items-center gap-2.5">
@@ -144,6 +140,8 @@ function FinShieldFooter() {
             <div>
               <div className="font-mono text-[9px] font-bold tracking-[1.2px] text-[#FF5B35] uppercase mb-3">Platform</div>
               <ul className="space-y-2 text-xs">
+                <li><Link href="/paypal" className="text-[#A7AAA3] hover:text-[#F2EFE7] transition-colors">Live demo (PayPal sandbox)</Link></li>
+                <li><Link href="/agent" className="text-[#A7AAA3] hover:text-[#F2EFE7] transition-colors">Analyst agent</Link></li>
                 <li><Link href="/" className="text-[#A7AAA3] hover:text-[#F2EFE7] transition-colors">Command Center</Link></li>
                 <li><Link href="/performance" className="text-[#A7AAA3] hover:text-[#F2EFE7] transition-colors">Model Observatory</Link></li>
                 <li><Link href="/architecture" className="text-[#A7AAA3] hover:text-[#F2EFE7] transition-colors">Risk Fusion Engine</Link></li>
@@ -198,14 +196,6 @@ export function LandingPage() {
   const [metrics, setMetrics] = useState<any>(null);
   const [health, setHealth] = useState<any>(null);
 
-  // Landing Page UPI Interactive Preview State
-  const [upiSender, setUpiSender] = useState<string>("demo@okhdfc");
-  const [upiReceiver, setUpiReceiver] = useState<string>("chaiwala@paytm");
-  const [upiAmount, setUpiAmount] = useState<number>(50);
-  const [upiNote, setUpiNote] = useState<string>("Chai & snacks");
-  const [upiProcessing, setUpiProcessing] = useState<boolean>(false);
-  const [upiResult, setUpiResult] = useState<Rec | null>(null);
-
   useEffect(() => {
     Promise.all([api.metrics(), api.health()]).then(([m, h]) => {
       setMetrics(m);
@@ -213,40 +203,8 @@ export function LandingPage() {
     }).catch(() => {});
   }, []);
 
-  async function handleUpiPayment(overrideAmount?: number) {
-    const amt = overrideAmount !== undefined ? overrideAmount : Number(upiAmount);
-    if (overrideAmount !== undefined) {
-      setUpiAmount(overrideAmount);
-    }
-    if (!amt || amt <= 0) {
-      alert("Please enter a valid UPI payment amount.");
-      return;
-    }
-    setUpiProcessing(true);
-    try {
-      const isLarge = amt >= 100000;
-      const isMicro = amt <= 500;
-      const payload = {
-        transaction_id: `UPI-${Date.now().toString().slice(-6)}`,
-        user_id: upiSender,
-        amount: amt,
-        timestamp: new Date().toISOString(),
-        merchant: upiReceiver,
-        merchant_category: isMicro ? "everyday" : (isLarge ? "high_value_p2p" : "p2p"),
-        device_id: "DEV-PHONE-DEMO",
-        location: isLarge ? "Home City (High-Value Transfer)" : "Home City",
-        velocity: 1,
-        usual_amount: 500.0,
-      };
-
-      const res: any = await api.score(payload);
-      setUpiResult(res);
-    } catch (e: any) {
-      alert("UPI Transaction failed: " + e.message);
-    } finally {
-      setUpiProcessing(false);
-    }
-  }
+  const roc = metrics?.xgboost?.roc_auc ? metrics.xgboost.roc_auc.toFixed(3) : "0.971";
+  const pr = metrics?.xgboost?.pr_auc ? metrics.xgboost.pr_auc.toFixed(3) : "0.842";
 
   return (
     <div className="min-h-screen tellnova-grid text-[#171916] flex flex-col justify-between selection:bg-[#FF5B35] selection:text-white">
@@ -262,7 +220,7 @@ export function LandingPage() {
                   <span className="font-bold tracking-tight text-lg text-[#171916]">FinShield</span>
                   <span className="text-[#FF5B35] font-black text-xl leading-none">.</span>
                   <span className="font-mono text-[9px] font-semibold tracking-[1.2px] text-[#7F837B] uppercase hidden sm:inline ml-1">
-                    // Fraud Defense
+                    // Fulfilment Shield
                   </span>
                 </div>
               </Link>
@@ -270,355 +228,213 @@ export function LandingPage() {
 
             <nav className="hidden md:flex items-center gap-6">
               <Link className="font-nav-link text-[#FF5B35] font-bold" href="/">Overview</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/command-center">Command Center</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/performance">Observatory</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/architecture">Architecture</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/privacy/U-00001">Privacy</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/glossary">Glossary</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">PayPal Shield</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/agent">Agent</Link>
+              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">Live Demo</Link>
+              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/agent">Agent</Link>
+              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/command-center">Console</Link>
             </nav>
 
             <div className="flex items-center gap-3">
               <Src s={health ? (health.adapter === "real" ? "LIVE_MODEL" : "DEMO_FALLBACK") : "DEMO_FALLBACK"} />
-              <Link href="/command-center" className="btn-primary py-2 px-3 text-[9px]">
-                Launch Console ↗
+              <Link href="/paypal" className="btn-primary py-2 px-3 text-[9px]">
+                Run the live demo ↗
               </Link>
             </div>
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-6 py-10 space-y-16">
-          {/* Top Hero Section */}
-          <div className="relative pt-8 pb-4">
-            <div className="tellnova-circle-accent w-[440px] h-[440px] -top-28 -right-24 opacity-90 hidden lg:block" />
-
-            <div className="grid lg:grid-cols-12 gap-8 items-start relative z-10">
-              <div className="lg:col-span-8 space-y-5">
-                <div className="font-mono text-[10px] uppercase font-bold tracking-[1.5px] text-[#FF5B35]">
-                  REAL-TIME FRAUD INTELLIGENCE
-                </div>
-                <h1 className="font-display-hero text-[#171916] max-w-3xl">
-                  Protect the stream.<br />
-                  Let safe payments move.
-                </h1>
-                <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <Link href="/command-center" className="btn-primary py-3.5 px-6 text-xs font-bold tracking-wider">
-                    Launch Command Center ↗
-                  </Link>
-                  <Link href="/performance" className="btn-secondary py-3 px-6 text-xs font-bold tracking-wider">
-                    Model Observatory
-                  </Link>
-                </div>
+        <main className="max-w-7xl mx-auto px-6">
+          {/* ---------------- hero ---------------- */}
+          <section className="relative pt-14 pb-10">
+            <div className="tellnova-circle-accent w-[460px] h-[460px] -top-32 -right-28 pointer-events-none" />
+            <div className="relative z-10">
+              <span className="badge-pill mono text-[9px]">PAYPAL AI HACKATHON · LIVE ON PAYPAL SANDBOX</span>
+              <h1 className="font-display-hero text-[#171916] max-w-4xl mt-4 leading-[1.02]">
+                PayPal locks the funds.
+                <br />
+                <span className="text-[#FF5B35]">FinShield decides</span> what ships.
+              </h1>
+              <p className="mt-5 max-w-2xl text-sm md:text-base leading-relaxed text-[#555951]">
+                A post-checkout fulfilment shield for digital-goods merchants. The buyer always completes
+                PayPal checkout; the 5-signal engine scores the authorization; risky payments are{" "}
+                <strong className="text-[#171916]">voided before delivery</strong> — nothing ships, nothing to dispute.
+              </p>
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <Link href="/paypal" className="btn-primary px-5 py-3 text-xs font-bold">
+                  Run the live demo →
+                </Link>
+                <Link href="/agent" className="btn-secondary px-5 py-3 text-xs font-bold">
+                  Meet the analyst agent
+                </Link>
               </div>
-
-              <div className="lg:col-span-4 lg:pt-8 space-y-4">
-                <p className="text-[#555951] text-base leading-relaxed">
-                  Every digital payment is evaluated across 5 independent signals in &lt;8ms. Micro-payments auto-clear instantly with zero friction while high-value fund drains and mule rings are intercepted on the wire.
-                </p>
-                <div className="pt-2 flex flex-wrap items-center gap-3">
-                  <span className="font-mono text-[9px] uppercase tracking-wider text-[#7F837B] px-2.5 py-1 rounded-full border border-[#D8D4CA] bg-white">
-                    FINSHIELD v2.1 PRODUCTION
-                  </span>
-                  <span className="font-mono text-[9px] uppercase tracking-wider text-[#1B5E20] flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#1B5E20] animate-pulse" />
-                    5-Signal Fusion Live
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Split Parallel Work / UPI Interactive Terminal */}
-          <div className="grid lg:grid-cols-12 gap-8 items-start pt-8 border-t border-[#D8D4CA]">
-            {/* Left Column */}
-            <div className="lg:col-span-5 space-y-6">
-              <div className="space-y-3">
-                <div className="font-mono text-[10px] uppercase font-bold tracking-[1.5px] text-[#FF5B35]">
-                  01 / PARALLEL FUSION
-                </div>
-                <h2 className="font-display-sub text-[#171916]">
-                  More than one model is running.
-                </h2>
-                <p className="text-[#555951] text-sm leading-relaxed">
-                  Separate pipelines evaluate in parallel. Supervised XGBoost (35%), Isolation Forest (20%), Deterministic Rules (20%), Behavioral Drift (15%), and NetworkX Graph Rings (10%) compute simultaneously in &lt;8ms.
-                </p>
-              </div>
-
-              {/* Quick Test Chips */}
-              <div className="p-4 rounded-[11px] bg-white border border-[#D8D4CA] space-y-2.5 shadow-sm">
-                <div className="font-mono text-[9px] uppercase font-bold tracking-wider text-[#7F837B] flex items-center justify-between">
-                  <span>Interactive UPI Test Presets:</span>
-                  <span className="text-[#FF5B35]">INSTANT BENCHMARK</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleUpiPayment(50)}
-                    className="font-mono text-[10px] font-semibold tracking-wider uppercase p-2.5 rounded-[7px] border border-[#2E7D32]/40 bg-[#2E7D32]/10 text-[#1B5E20] hover:bg-[#2E7D32]/20 transition-all text-left flex items-center justify-between"
-                  >
-                    <span>☕ ₹50</span>
-                    <span className="text-[9px] opacity-80">PASS (SAFE)</span>
-                  </button>
-                  <button
-                    onClick={() => handleUpiPayment(100)}
-                    className="font-mono text-[10px] font-semibold tracking-wider uppercase p-2.5 rounded-[7px] border border-[#2E7D32]/40 bg-[#2E7D32]/10 text-[#1B5E20] hover:bg-[#2E7D32]/20 transition-all text-left flex items-center justify-between"
-                  >
-                    <span>🍕 ₹100</span>
-                    <span className="text-[9px] opacity-80">PASS (SAFE)</span>
-                  </button>
-                  <button
-                    onClick={() => handleUpiPayment(100000)}
-                    className="font-mono text-[10px] font-semibold tracking-wider uppercase p-2.5 rounded-[7px] border border-[#FF5B35]/50 bg-[#FF5B35]/10 text-[#FF5B35] hover:bg-[#FF5B35]/20 transition-all text-left flex items-center justify-between"
-                  >
-                    <span>🚨 ₹1,00,000</span>
-                    <span className="text-[9px] font-bold">1 LAKH (BLOCK)</span>
-                  </button>
-                  <button
-                    onClick={() => handleUpiPayment(250000)}
-                    className="font-mono text-[10px] font-semibold tracking-wider uppercase p-2.5 rounded-[7px] border border-[#C53030]/50 bg-[#C53030]/10 text-[#C53030] hover:bg-[#C53030]/20 transition-all text-left flex items-center justify-between"
-                  >
-                    <span>🛑 ₹2,50,000</span>
-                    <span className="text-[9px] font-bold">BLOCK</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: High-Contrast Dark Console */}
-            <div className="lg:col-span-7">
-              <div className="tellnova-terminal p-6 space-y-5">
-                {/* Console Window Chrome Header */}
-                <div className="flex items-center justify-between border-b border-[#2B2D2A] pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#FF5B35]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#B7791F]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#2E7D32]" />
-                    <span className="font-mono text-[10px] text-[#A7AAA3] ml-2 tracking-wider">
-                      finshield // upi_gateway
-                    </span>
-                  </div>
-                  <div className="font-mono text-[9px] uppercase tracking-wider text-[#2E7D32] flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32] animate-ping" />
-                    LIVE MODEL ENGINE
-                  </div>
-                </div>
-
-                {/* Terminal Prompt Bar */}
-                <div className="space-y-1">
-                  <div className="font-title-strong text-base text-[#F2EFE7]">
-                    Simulate Live UPI Transaction
-                  </div>
-                  <p className="font-mono text-[11px] text-[#7F837B]">
-                    Test real-time scoring: micro-payments (₹50–₹100) auto-verify; transfers in Lakhs (≥₹1 Lakh) trigger immediate anomaly block.
-                  </p>
-                </div>
-
-                {/* Form Fields inside Console */}
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="font-mono text-[9px] uppercase tracking-wider text-[#A7AAA3] block mb-1">
-                      Payer (UPI ID)
-                    </label>
-                    <input
-                      type="text"
-                      value={upiSender}
-                      onChange={(e) => setUpiSender(e.target.value)}
-                      className="w-full rounded-[7px] px-3 py-2 text-xs font-mono outline-none"
-                      placeholder="demo@okhdfc"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-mono text-[9px] uppercase tracking-wider text-[#A7AAA3] block mb-1">
-                      Payee / Merchant
-                    </label>
-                    <input
-                      type="text"
-                      value={upiReceiver}
-                      onChange={(e) => setUpiReceiver(e.target.value)}
-                      className="w-full rounded-[7px] px-3 py-2 text-xs font-mono outline-none"
-                      placeholder="chaiwala@paytm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-mono text-[9px] uppercase tracking-wider text-[#A7AAA3]">
-                      Amount (₹ INR)
-                    </label>
-                    <span className="font-mono text-[9px] text-[#FF5B35]">
-                      THRESHOLD: ₹1,00,000
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-base font-bold text-[#7F837B]">₹</span>
-                    <input
-                      type="number"
-                      value={upiAmount}
-                      onChange={(e) => setUpiAmount(Number(e.target.value))}
-                      className="w-full rounded-[7px] pl-7 pr-3 py-2 text-lg font-bold font-mono outline-none"
-                      placeholder="50"
-                    />
-                  </div>
-                  <div className="mt-1.5 flex items-center justify-between font-mono text-[10px]">
-                    <span className={upiAmount >= 100000 ? "text-[#FF5B35] font-bold" : (upiAmount <= 500 ? "text-[#4CAF50] font-bold" : "text-[#FFB74D]")}>
-                      {upiAmount >= 100000 ? "🚨 High-Value Anomaly (Triggers Hard Block)" : (upiAmount <= 500 ? "✅ Everyday Micro-Payment (Auto-Approve)" : "⚠️ Moderate Value Transfer")}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="font-mono text-[9px] uppercase tracking-wider text-[#A7AAA3] block mb-1">
-                    Transfer Note / Purpose
-                  </label>
-                  <input
-                    type="text"
-                    value={upiNote}
-                    onChange={(e) => setUpiNote(e.target.value)}
-                    className="w-full rounded-[7px] px-3 py-2 text-xs font-mono outline-none"
-                    placeholder="e.g. Chai, Dinner, Salary transfer"
-                  />
-                </div>
-
-                <button
-                  onClick={() => handleUpiPayment()}
-                  disabled={upiProcessing}
-                  className="btn-primary w-full py-3.5 text-xs font-bold tracking-wider"
-                >
-                  {upiProcessing ? "Evaluating Multi-Signal Graph…" : `PAY ₹${Number(upiAmount).toLocaleString("en-IN")} VIA UPI ↗`}
-                </button>
-
-                {/* Result Box inside Console */}
-                {upiResult && (
-                  <div className="mt-4 pt-4 border-t border-[#2B2D2A] space-y-3">
-                    {upiResult.score.risk_score >= 0.7 ? (
-                      <div className="p-4 rounded-[11px] border border-[#FF5B35]/60 bg-[#FF5B35]/15 text-[#F2EFE7] space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl">🚨</span>
-                            <div>
-                              <div className="font-title-strong text-sm text-[#FF5B35]">
-                                PAYMENT BLOCKED — FLAGGED AS NOT SAFE
-                              </div>
-                              <div className="font-mono text-[10px] text-[#A7AAA3]">
-                                High-Value Fund Drain Intercepted on Wire
-                              </div>
-                            </div>
-                          </div>
-                          <span className="font-mono text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#FF5B35] text-white uppercase">
-                            CRITICAL
-                          </span>
-                        </div>
-                        <p className="font-mono text-xs text-[#F2EFE7]/90">
-                          Transfer of ₹{Number(upiResult.transaction.amount).toLocaleString("en-IN")} to {String(upiResult.transaction.merchant)} was blocked.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="p-4 rounded-[11px] border border-[#2E7D32]/60 bg-[#2E7D32]/15 text-[#F2EFE7] space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl">✅</span>
-                            <div>
-                              <div className="font-title-strong text-sm text-[#4CAF50]">
-                                PAYMENT APPROVED & VERIFIED SAFE
-                              </div>
-                              <div className="font-mono text-[10px] text-[#A7AAA3]">
-                                Passed FinShield 5-Signal Guardrails
-                              </div>
-                            </div>
-                          </div>
-                          <span className="font-mono text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#2E7D32] text-white uppercase">
-                            LOW RISK
-                          </span>
-                        </div>
-                        <p className="font-mono text-xs text-[#F2EFE7]/90">
-                          ₹{Number(upiResult.transaction.amount).toLocaleString("en-IN")} sent to {String(upiResult.transaction.merchant)} safely.
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="p-3 bg-[#222521] rounded-[7px] border border-[#383B36] font-mono text-xs text-[#A7AAA3] flex items-center justify-between">
-                      <span>Composite Risk Score: <strong className={upiResult.score.risk_score >= 0.7 ? "text-[#FF5B35]" : "text-[#4CAF50]"}>{(upiResult.score.risk_score * 100).toFixed(1)}/100</strong></span>
-                      <Link href={`/investigate/${upiResult.transaction.transaction_id}`} className="text-[#FF5B35] hover:underline">
-                        Open Forensic Graph →
-                      </Link>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Full-Bleed Vibrant Orange Workflow Banner */}
-          <section className="bg-[#FF5B35] text-[#171916] py-14 px-6 md:px-12 rounded-[14px] my-10 shadow-lg">
-            <div className="font-mono text-[10px] uppercase font-bold tracking-[1.5px] text-[#171916] opacity-80 mb-3">
-              THE FRAUD INTERCEPTION PIPELINE
-            </div>
-            <h2 className="font-display-hero text-[#171916] mb-10 leading-none">
-              Ingest. Evaluate. Intercept.
-            </h2>
-
-            <div className="grid md:grid-cols-3 gap-8 pt-6 border-t border-[#171916]/20">
-              <div className="space-y-2">
-                <div className="font-mono text-xs font-bold text-[#171916] opacity-70">01</div>
-                <h3 className="font-title-strong text-lg text-[#171916]">Ingest & Tokenize</h3>
-                <p className="text-xs text-[#171916]/80 leading-relaxed">
-                  Payer identity and device fingerprints are tokenized with salted SHA-256 before extraction of 36 leakage-safe features.
-                </p>
-              </div>
-
-              <div className="space-y-2 md:border-l md:border-[#171916]/20 md:pl-8">
-                <div className="font-mono text-xs font-bold text-[#171916] opacity-70">02</div>
-                <h3 className="font-title-strong text-lg text-[#171916]">5-Signal Risk Fusion</h3>
-                <p className="text-xs text-[#171916]/80 leading-relaxed">
-                  Supervised XGBoost, Isolation Forest, Graph Mule Rings, Behavioral Drift, and 8 Rules score simultaneously in &lt;8ms.
-                </p>
-              </div>
-
-              <div className="space-y-2 md:border-l md:border-[#171916]/20 md:pl-8">
-                <div className="font-mono text-xs font-bold text-[#171916] opacity-70">03</div>
-                <h3 className="font-title-strong text-lg text-[#171916]">Intercept or Clear</h3>
-                <p className="text-xs text-[#171916]/80 leading-relaxed">
-                  Auto-approve safe UPI transfers. Intercept anomalous attacks with full SHAP explainability and grounded copilot evidence.
-                </p>
+              <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 font-mono text-[10px] text-[#7F837B]">
+                <span>XGBOOST ROC-AUC <strong className="text-[#171916]">{roc}</strong></span>
+                <span>PR-AUC <strong className="text-[#171916]">{pr}</strong></span>
+                <span><strong className="text-[#171916]">217</strong> TESTS</span>
+                <span><strong className="text-[#171916]">REAL</strong> SANDBOX CAPTURE + VOID</span>
               </div>
             </div>
           </section>
 
-          {/* Benchmark Overview Cards */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="badge-pill mb-1 inline-block">Validation Telemetry</span>
-                <h2 className="font-title-strong text-2xl text-[#171916]">Model Performance & Benchmarks</h2>
+          {/* ---------------- three verdicts ---------------- */}
+          <section className="py-10">
+            <div className="font-mono text-[10px] uppercase font-bold tracking-[1.5px] text-[#FF5B35] mb-1">
+              THE THREE VERDICTS
+            </div>
+            <h2 className="font-title-strong text-2xl text-[#171916] mb-6">
+              Every authorization ends in exactly one of these.
+            </h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="card-white p-5 fin-fade-up">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E8F5E9]">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#2E7D32" strokeWidth="1.6" /><path d="M5 8.2l2 2L11.5 6" stroke="#2E7D32" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </span>
+                  <div className="font-title-strong text-lg text-[#1B5E20]">AUTO-CAPTURE</div>
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-[#555951]">
+                  Clean buyer, familiar device, usual amount. Funds captured in under a second — the
+                  download unlocks immediately. Full autopilot for the 95%.
+                </p>
+                <div className="mono mt-3 text-[9px] text-[#2E7D32] bg-[#E8F5E9] rounded-[7px] px-3 py-2 w-fit">
+                  REAL RUN · $42.00 → CAPTURED · score 0.037
+                </div>
               </div>
-              <Link href="/performance" className="font-mono text-xs text-[#FF5B35] font-semibold hover:underline">
-                Full Observatory →
-              </Link>
+              <div className="card-white p-5 fin-fade-up" style={{ animationDelay: "80ms" }}>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFF8E7]">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="3.5" y="7" width="9" height="6.5" rx="1.6" stroke="#B7791F" strokeWidth="1.6" /><path d="M5.5 7V5.4a2.5 2.5 0 015 0V7" stroke="#B7791F" strokeWidth="1.6" /></svg>
+                  </span>
+                  <div className="font-title-strong text-lg text-[#7B341E]">STEP-UP / REVIEW</div>
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-[#555951]">
+                  Amount far off profile or new-device spike. Funds stay locked; a demo OTP or the
+                  analyst decides — pass captures, fail voids.
+                </p>
+                <div className="mono mt-3 text-[9px] text-[#7B341E] bg-[#FFF8E7] rounded-[7px] px-3 py-2 w-fit">
+                  OTP 123456 · PASS → CAPTURE · FAIL → VOID
+                </div>
+              </div>
+              <div className="card-white p-5 fin-fade-up" style={{ animationDelay: "160ms" }}>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FDECEC]">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#C53030" strokeWidth="1.6" /><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#C53030" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                  </span>
+                  <div className="font-title-strong text-lg text-[#C53030]">AUTO-VOID</div>
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-[#555951]">
+                  Stolen account, shared-device ring, extreme value. Voided before delivery —
+                  no goods lost, no chargeback fees, nothing to fight.
+                </p>
+                <div className="mono mt-3 text-[9px] text-[#C53030] bg-[#FDECEC] rounded-[7px] px-3 py-2 w-fit">
+                  REAL RUN · $4,800 → VOIDED · score 0.89
+                </div>
+              </div>
             </div>
+          </section>
 
-            <div className="grid md:grid-cols-3 gap-4">
-              <Card>
-                <div className="font-mono text-[10px] uppercase tracking-wider text-[#7F837B]">Real Benchmark — XGB ROC-AUC</div>
-                <div className="text-3xl font-bold font-mono text-[#171916] mt-1">{metrics?.xgboost ? metrics.xgboost.roc_auc.toFixed(4) : "0.9709"}</div>
-                <div className="text-xs text-[#7F837B] mt-1">Evaluated on real Kaggle ULB dataset (284k rows)</div>
-              </Card>
-              <Card>
-                <div className="font-mono text-[10px] uppercase tracking-wider text-[#7F837B]">Real Benchmark — XGB PR-AUC</div>
-                <div className="text-3xl font-bold font-mono text-[#171916] mt-1">{metrics?.xgboost ? metrics.xgboost.pr_auc.toFixed(4) : "0.8418"}</div>
-                <div className="text-xs text-[#7F837B] mt-1">0.17% fraud rate • 486× lift over random baseline</div>
-              </Card>
-              <Card>
-                <div className="font-mono text-[10px] uppercase tracking-wider text-[#7F837B]">Hard-Overlap Stress Test</div>
-                <div className="text-3xl font-bold font-mono text-[#171916] mt-1">0.373</div>
-                <div className="text-xs text-[#7F837B] mt-1">Intentionally stressed overlapping signal robustness</div>
-              </Card>
+          {/* ---------------- how it works ---------------- */}
+          <section className="py-10">
+            <div className="font-mono text-[10px] uppercase font-bold tracking-[1.5px] text-[#FF5B35] mb-1">
+              HOW IT WORKS
             </div>
-          </div>
+            <h2 className="font-title-strong text-2xl text-[#171916] mb-6">
+              Three moves, fully inside PayPal&apos;s own rails.
+            </h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              {[
+                { n: "1", t: "AUTHORIZE", b: "Orders v2 with intent AUTHORIZE — the buyer pays normally, PayPal locks the funds." },
+                { n: "2", t: "SCORE", b: "XGBoost + IsolationForest + rules + behavior + device graph, currency-normalized, SHAP-grade evidence." },
+                { n: "3", t: "GATE", b: "Capture, verify, review — or void. Every decision trail is stored for disputes." },
+              ].map((s) => (
+                <div key={s.n} className="card-white flex items-start gap-3 p-4">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#171916] font-mono text-xs font-bold text-[#F2EFE7]">{s.n}</div>
+                  <div>
+                    <div className="font-label-caps text-[10px] text-[#FF5B35]">{s.t}</div>
+                    <div className="mt-[2px] text-[11px] leading-snug text-[#555951]">{s.b}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ---------------- guardrail ---------------- */}
+          <section className="py-10">
+            <div className="tellnova-callout-box p-6 md:p-10 relative overflow-hidden">
+              <div className="tellnova-circle-accent w-[300px] h-[300px] -top-16 -right-16 opacity-70 pointer-events-none" />
+              <div className="relative z-10 max-w-3xl">
+                <div className="font-mono text-[10px] uppercase font-bold tracking-[1.5px] text-[#FF5B35]">
+                  THE GUARDRAIL
+                </div>
+                <h2 className="font-display-sub text-[#F2EFE7] mt-3 leading-snug">
+                  The model never sets the score.
+                  <br />
+                  The agent never moves money alone.
+                </h2>
+                <p className="mt-4 text-xs leading-relaxed text-[#A7AAA3] max-w-xl">
+                  The analyst agent investigates flagged authorizations with six tools and drafts dispute
+                  evidence from SHAP signals, device-graph connections and checkout telemetry — but every
+                  capture, void and refund it proposes sits in a queue until a human clicks.
+                </p>
+                <Link href="/agent" className="inline-block mt-5 font-mono text-[11px] text-[#FF5B35] hover:underline">
+                  Watch it propose → you approve →
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          {/* ---------------- why it exists ---------------- */}
+          <section className="py-10">
+            <div className="font-mono text-[10px] uppercase font-bold tracking-[1.5px] text-[#FF5B35] mb-1">
+              WHY IT EXISTS
+            </div>
+            <h2 className="font-title-strong text-2xl text-[#171916] mb-6 max-w-2xl">
+              PayPal stops stolen cards at checkout. Nobody protects the merchant after.
+            </h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              {[
+                { t: "Friendly fraud", b: "The real buyer keeps the download, then files a chargeback weeks later. PayPal Seller Protection does not cover digital goods." },
+                { t: "Post-authorization blind spot", b: "Checkout-side risk engines decide before payment. After funds lock, the merchant ships blind." },
+                { t: "Evidence merchants lose without", b: "Disputes are won with data: device fingerprints, velocity, behavioral baselines. Merchants hand-write none of it." },
+              ].map((c) => (
+                <div key={c.t} className="card-white p-5">
+                  <div className="font-title-strong text-sm text-[#171916]">{c.t}</div>
+                  <p className="mt-2 text-xs leading-relaxed text-[#555951]">{c.b}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ---------------- metrics strip ---------------- */}
+          <section className="py-10">
+            <div className="card-white p-6 flex flex-wrap items-center justify-between gap-6">
+              <div>
+                <div className="font-mono text-[10px] uppercase font-bold tracking-[1.5px] text-[#FF5B35]">
+                  BENCHMARKS
+                </div>
+                <div className="font-title-strong text-xl text-[#171916] mt-1">
+                  Trained on real data. Benchmarked honestly.
+                </div>
+                <p className="font-mono text-[10px] text-[#7F837B] mt-1">
+                  ULB creditcard 284,807 rows · 0.17% fraud · zero-leakage features
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <div className="rounded-[11px] border border-[#E7E4DB] px-5 py-3 text-center">
+                  <div className="font-mono text-2xl font-bold text-[#171916]">{roc}</div>
+                  <div className="font-micro-label text-[9px] text-[#7F837B]">ROC-AUC</div>
+                </div>
+                <div className="rounded-[11px] border border-[#E7E4DB] px-5 py-3 text-center">
+                  <div className="font-mono text-2xl font-bold text-[#171916]">{pr}</div>
+                  <div className="font-micro-label text-[9px] text-[#7F837B]">PR-AUC</div>
+                </div>
+                <Link href="/performance" className="btn-secondary px-4 py-3 text-[10px] self-center">
+                  Full observatory →
+                </Link>
+              </div>
+            </div>
+          </section>
         </main>
       </div>
-
       <FinShieldFooter />
     </div>
   );
@@ -768,13 +584,9 @@ export function CommandCenter() {
 
             <nav className="hidden md:flex items-center gap-6">
               <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/">← Landing Page</Link>
-              <Link className="font-nav-link text-[#FF5B35] font-bold" href="/command-center">Command Center</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/performance">Observatory</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/architecture">Architecture</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/privacy/U-00001">Privacy</Link>
-              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/glossary">Glossary</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">PayPal Shield</Link>
-          <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/agent">Agent</Link>
+              <Link className="font-nav-link text-[#FF5B35] font-bold" href="/command-center">Console</Link>
+              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/paypal">Live Demo</Link>
+              <Link className="font-nav-link text-[#555951] hover:text-[#FF5B35] transition-colors" href="/agent">Agent</Link>
             </nav>
 
             <div className="flex items-center gap-2.5">
