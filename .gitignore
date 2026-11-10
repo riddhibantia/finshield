@@ -57,3 +57,7 @@ Thumbs.db
 !evaluation/metrics.json
 !evaluation/reports/*.md
 !evaluation/reports/*.json
+
+# Secrets (never commit)
+.env
+.env.local
