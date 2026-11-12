@@ -1,302 +1,213 @@
 <div align="center">
 
+<img src="frontend/public/favicon.svg" alt="FinShield logo" width="56" height="56" />
+
 # FinShield
 
-**Real-Time, Multi-Signal Fraud Defense for Digital Payments — ML Engine + API + Dashboard in One Repo**
+**PayPal locks the funds. FinShield decides what ships.**
 
-### ▶ Live Demo: https://finshield-demo.vercel.app
+Post-authorization fulfilment security & fraud investigation platform for digital commerce — scoring PayPal Orders v2 authorization holds across **five independent ML, rule, and graph signals**, explaining verdicts with **TreeSHAP**, and gating capture, OTP step-up, review, or pre-delivery void behind a **human-approved AI analyst agent**.
 
-![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-215%20passing-success)
-![XGBoost ROC-AUC 0.97](https://img.shields.io/badge/XGBoost-ROC--AUC%200.97-orange)
-![FastAPI](https://img.shields.io/badge/FastAPI-13%20endpoints-009688)
-![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB)
-![SHAP](https://img.shields.io/badge/SHAP-explainability-yellow)
-![License](https://img.shields.io/badge/License-MIT-green)
-![Colab](https://img.shields.io/badge/Colab-ready-f9ab00)
+[![PayPal Orders v2](https://img.shields.io/badge/PayPal-Orders%20v2%20Sandbox-003087?logo=paypal&logoColor=white)](#how-paypal-and-ai-work-together)
+[![XGBoost ROC-AUC 0.971](https://img.shields.io/badge/XGBoost-ROC--AUC%200.971-D7F46B?labelColor=0A120E)](#offline-ulb-benchmarks)
+[![FastAPI](https://img.shields.io/badge/FastAPI-34%20Endpoints-009688?logo=fastapi&logoColor=white)](#api-surface)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16%20%7C%20React%2019-black?logo=next.js&logoColor=white)](#repository-structure)
+[![Backend Tests](https://img.shields.io/badge/API%20Tests-36%20passing-success)](#testing--verification)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
+<br />
+
+<img src="docs/assets/hero-landing.png" alt="FinShield Hero — PayPal Pre-Delivery Risk Shield" width="100%" />
 
 </div>
 
-## Overview
+---
 
-FinShield scores every payment across **five independent signals** — XGBoost (supervised), Isolation Forest (anomaly), behavioral profiling, 8 deterministic rules, and a NetworkX entity graph — fused into one calibrated risk score (APPROVE / STEP_UP / INVESTIGATE / BLOCK). **SHAP** explains each decision mathematically; an instruction-tuned LLM copilot narrates the evidence for analysts.
+## Why FinShield?
 
-Three layers, one repo: `src/finsheild/` (research + training engine), `backend/` (FastAPI, 13 endpoints incl. live Cashfree webhooks), `frontend/` (Next.js 16 + React 19 investigation workstation).
+Digital goods merchants face an asymmetric timing problem: **stolen cards, card-testing rings, and friendly fraudsters pass checkout**, download licenses, credits, or API keys instantly, and trigger chargebacks weeks later.
 
-> [!IMPORTANT]
-> The LLM copilot acts purely as an observability and explainability layer. It provides context to fraud analysts but **never** overrides the deterministic or ML-driven risk scores.
-
-## Run the Demo (2 Minutes)
-
-**Live hosted demo (no install):** https://finshield-demo.vercel.app — runs fully offline on the built-in simulation.
-
-Or run the full stack locally:
-
-```bash
-pip install -r requirements.txt
-bash start_app.sh
-```
-
-Open **http://127.0.0.1:5173** → Command Center → inject a **Fraud Ring** → click it for the forensic view (risk radar, SHAP bars, copilot, entity graph). Or fire a gateway payment yourself from the Cashfree studio tab (₹75 scores LOW, ₹1,00,000 scores CRITICAL). API docs at **http://127.0.0.1:8000/docs**. Full guide: `docs/app.md`.
-
-## How the Full Stack Works Together
-
-```mermaid
-graph TD
-    subgraph Frontend [Frontend - Next.js App Router]
-        UI[Workstation UI]
-        Routes[/ • /command-center • /investigate • /performance • /architecture • /privacy • /glossary/]
-        APIClient[Typed API Client + Offline Simulation]
-        UI --> Routes
-        Routes --> APIClient
-    end
-
-    subgraph Backend [Backend - FastAPI]
-        API[13 REST Endpoints + Cashfree Webhooks]
-        Services[Services / Store]
-        Adapters[ML Adapters]
-        APIClient -- REST --> API
-        API --> Services
-        Services --> Adapters
-    end
-
-    subgraph Core [ML Core - Same Repo]
-        Real[Real Adapter]
-        Mock[Mock Adapter]
-        MLCore[(src/finsheild + models/)]
-        Adapters --> Real
-        Adapters --> Mock
-        Real --> MLCore
-    end
-```
+Pre-checkout risk filters cause costly false declines, while post-capture checks happen *after* digital goods have already shipped. With **PayPal Orders v2 (`intent=AUTHORIZE`)**, FinShield intervenes at the exact right millisecond: **after the buyer authorizes funds, and before fulfilment unlocks.**
 
 ---
 
-## Architecture & Data Flow
+## What Was Built for the PayPal AI Hackathon
 
-FinSheild relies on five distinct evaluation signals to holistically assess transaction risk:
-1. **XGBoost Supervised Model**: Primary pattern recognition engine (500 trees).
-2. **Isolation Forest**: Unsupervised anomaly detection trained solely on legitimate behavior (0.05 contamination).
-3. **Behavioral Profiling**: Per-user baselines measuring deviation scores.
-4. **Deterministic Rules**: 8 configurable hard-coded heuristics.
-5. **Graph Analysis (NetworkX)**: Evaluates user ↔ account ↔ device ↔ merchant cliques for shared-device velocity and ring detection.
+This repository combines our existing offline ML fraud research core (`src/finsheild/`, tagged `pre-paypal` on `main`) with a full-stack **PayPal Sandbox & AI Analyst integration** built on the `paypal-hackathon` branch:
 
-### Signal Fusion Architecture
+- **Pre-existing core (`pre-paypal`):** 5-signal ML fraud engine trained on the ULB dataset (`XGBoost`, `IsolationForest`, behavioral profiling, 8 deterministic rules, `NetworkX` entity graph, `TreeSHAP` explainability) and earlier console views.
+- **Built during this hackathon:**
+  - `backend/paypal/` — PayPal OAuth REST client with thread-safe token caching, `PayPal-Request-Id` idempotency keys, `PayPal-Debug-Id` diagnostics, webhook ingestion/deduplication, and an in-memory stub transport (`PAYPAL_ENV=stub`).
+  - **Pre-Delivery Authorization Gate** — PayPal Orders v2 (`intent=AUTHORIZE`) + PayPal JS SDK v6 & redirect approval flows routing holds through `Auto-Capture`, `OTP Step-Up`, `Analyst Review`, and `Auto-Void`, with currency-normalized USD scoring.
+  - `backend/agent/` — Tool-calling Analyst Agent (`llama-3.3-70b-versatile` via Groq / OpenAI-compatible API + deterministic fallback) that investigates transactions, runs dispute simulations, drafts audit evidence briefs, and queues **human-approved** captures, voids, and refunds.
+  - `frontend/` — Redesigned Next.js 16 dark-emerald workstation with `/paypal` live Sandbox studio, `/agent` copilot queue, `/investigate` SHAP + device ring forensics, and `/performance` ULB benchmarks, plus `backend/tests/test_paypal_flow.py`.
+
+---
+
+## How PayPal and AI Work Together
 
 ```mermaid
 flowchart TD
-    TX[Transaction Data] --> F[Feature Extraction]
-    F --> XGB[XGBoost\nWeight: 0.35]
-    F --> IF[Isolation Forest\nWeight: 0.20]
-    F --> BP[Behavioral Profile\nWeight: 0.15]
-    F --> DR[Deterministic Rules\nWeight: 0.20]
-    F --> GA[NetworkX Graph\nWeight: 0.10]
-    
-    XGB --> RFE[Risk Fusion Engine]
-    IF --> RFE
-    BP --> RFE
-    DR --> RFE
-    GA --> RFE
-    
-    RFE --> S[Score 0.0 - 1.0]
-    S --> DEC{Decision}
-    
-    DEC -- < 0.3 --> G[GREEN: APPROVE]
-    DEC -- 0.3 to 0.7 --> Y[YELLOW: STEP_UP/INVESTIGATE]
-    DEC -- > 0.7 --> R[RED: BLOCK]
-    
-    DEC --> EXP[SHAP TreeExplainer]
-    EXP --> LLM[LLM Copilot Explainer]
+    B[Buyer Checks Out via PayPal Orders v2<br/>intent = AUTHORIZE] --> H[PayPal Sandbox Locks Funds<br/>Returns Authorization ID]
+    H --> FE[Feature Extractor & USD Normalizer]
+
+    FE --> S1[XGBoost<br/>Weight 0.35]
+    FE --> S2[Isolation Forest<br/>Weight 0.20]
+    FE --> S3[Deterministic Rules x8<br/>Weight 0.20]
+    FE --> S4[Behavioral Drift<br/>Weight 0.15]
+    FE --> S5[NetworkX Device Graph<br/>Weight 0.10]
+
+    S1 & S2 & S3 & S4 & S5 --> RF[Calibrated Risk Fusion Score 0.0 - 1.0]
+
+    RF -- "< 0.30 (Low)" --> AC[Auto-Capture via PayPal API<br/>Deliver Digital Goods]
+    RF -- "0.30 - 0.60 (Medium)" --> OTP[Hold for OTP Step-Up<br/>Demo Code 123456 -> Capture / Fail -> Void]
+    RF -- "0.60 - 0.85 (High)" --> AR[Hold for Analyst Review<br/>Human Approve Capture or Void]
+    RF -- ">= 0.85 (Critical)" --> AV[Auto-Void Before Delivery<br/>Zero Chargeback Exposure]
+
+    AR & AC & OTP & AV --> EX[TreeSHAP Drivers + Audit Brief + SQLite Ledger]
+    EX --> AG[AI Analyst Copilot - Read & Propose Only<br/>Llama 3.3 70B / DEMO_FALLBACK]
+    AG -- "PENDING Action Proposal" --> HG{Human Clicks Approve?}
+    HG -- "Yes (POST /api/agent/actions/:id/approve)" --> PP[Execute PayPal Refund / Capture / Void]
 ```
 
-### Data Flow Sequence
+### PayPal Developer Platform Integration
+- **PayPal Orders v2 & Payments v2 REST APIs (`backend/paypal/client.py`):** Authenticates via OAuth 2.0, creates `AUTHORIZE` orders, authorizes holds, captures clean/OTP-verified payments, voids fraudulent holds cleanly (handling PayPal `204 No Content`), and issues idempotent refunds.
+- **PayPal JS SDK v6 + Redirect Approval (`frontend/components/paypal.tsx`):** Drives live Sandbox checkout with automatic fallback to Orders v2 `approve_url` redirect flows.
+- **Webhooks & Dispute Simulation (`backend/paypal/router.py`):** Ingests asynchronous PayPal events with idempotent deduplication and builds **Dispute Evidence Briefs** packaging pre-delivery risk score, timing, and SHAP attributions.
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant API as Inference API
-    participant FE as Feature Eng
-    participant S as 5-Signal Engines
-    participant R as Risk Fusion
-    participant X as SHAP + LLM
-    
-    C->>API: Submit Transaction
-    API->>FE: Extract 36 features
-    FE->>S: Process signals in parallel
-    S-->>R: Return individual scores
-    R->>R: Calculate weighted fusion score
-    R->>API: Return Decision (APPROVE/BLOCK)
-    API-->>C: Immediate Response
-    R->>X: Async explanation generation
-    X-->>API: Grounded Evidence JSON
+### AI & ML Guardrail Design
+1. **Calibrated Hybrid Risk Engine:** Fuses supervised classification (`XGBoost`, 500 trees), unsupervised outlier detection (`IsolationForest`, trained strictly on legitimate orders), personal behavioral baselines, 8 hard policy rules, and `NetworkX` shared-device cliques.
+2. **Mathematical Explainability (`TreeSHAP`):** Explains every hold (`amount_deviation`, `velocity_5m`, shared hardware cluster, geographic jump) instead of returning opaque scores.
+3. **Human-in-the-Loop Tool Boundary (`backend/agent/tools.py`):** The LLM copilot uses read tools (`list_high_risk_transactions`, `get_transaction_risk`) and proposal tools (`propose_capture`, `propose_void`, `propose_refund`) that **only write `PENDING` rows**. Automated tests in `backend/tests/test_agent_guardrail.py` verify that no money-moving PayPal call is reachable from the AI agent loop without explicit human click approval.
+
+---
+
+## Pre-Delivery Fulfilment Scenarios (`/paypal`)
+
+| Scenario | Order Value | Triggered Signals | Gate Action |
+| :--- | :---: | :--- | :--- |
+| **Clean Returning Buyer** | `$42.00` | Known device, habitual spend, zero tripwires | `AUTO_CAPTURE` (delivers cleanly) |
+| **Friendly-Fraudster** | `$220.00` | `4.8×` spend spike over typical baseline | `HOLD_STEP_UP` (`123456` OTP captures; wrong code voids) |
+| **Suspicious Pattern** | `$180.00` | New device + transaction velocity spike | `HOLD_FOR_REVIEW` (analyst approve / void queue) |
+| **Stolen Account / Card Ring** | `$4,800.00` | Shared hardware `DEV-NEW-PAYPAL`, `8` rapid attempts, `400 km` jump | `AUTO_VOID` (released before delivery) |
+
+---
+
+## Offline ULB Benchmarks
+
+Evaluated offline on the **Kaggle ULB Credit Card Fraud Dataset** (`284,807` transactions, `492` fraud cases / `0.17%` positive class) using zero-leakage stratified splits (`70% / 15% / 15%`) with `StandardScaler` fitted exclusively on the training partition:
+
+| Model | ROC-AUC | PR-AUC | Precision `@0.5` | Recall `@0.5` | F1 Score |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Logistic Regression *(Baseline)* | `0.9495` | `0.7005` | `0.8197` | `0.6757` | `0.7407` |
+| **XGBoost (500 Trees, Scaled)** | **`0.9709`** | **`0.8418`** | **`0.9206`** | **`0.7838`** | **`0.8467`** |
+
+*Held-out test confusion matrix (`42,722` transactions): `58` True Positives · `5` False Positives · `16` False Negatives · `42,643` True Negatives.*
+
+---
+
+## Quickstart (Run Locally in 60 Seconds)
+
+### Option 1 — Zero-Credential Local Mode (`PAYPAL_ENV=stub`)
+Run the entire PayPal authorization -> risk gate -> AI analyst agent workflow offline using FinShield's deterministic in-memory PayPal transport and `DEMO_FALLBACK` investigator:
+
+```bash
+git clone -b paypal-hackathon https://github.com/riddhibantia/finshield.git
+cd finshield
+
+# 1. Python environment
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Configure env (stub mode works with no external secrets)
+cp .env.example .env
+# Set PAYPAL_ENV=stub inside .env
+
+# 3. Launch FastAPI (:8000) + Next.js (:5173)
+bash start_app.sh
+```
+
+Open **[http://127.0.0.1:5173/paypal](http://127.0.0.1:5173/paypal)** for the Sandbox Studio, **[http://127.0.0.1:5173/agent](http://127.0.0.1:5173/agent)** for the Analyst Copilot, and **[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)** for Swagger API docs.
+
+### Option 2 — Live PayPal Developer Sandbox + Groq LLM
+1. Create a free REST app in the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/applications/sandbox) and copy its **Client ID** and **Secret**.
+2. Populate `.env`:
+   ```env
+   PAYPAL_ENV=sandbox
+   PAYPAL_CLIENT_ID=your_sandbox_client_id
+   PAYPAL_CLIENT_SECRET=your_sandbox_client_secret
+   LLM_BASE_URL=https://api.groq.com/openai/v1
+   LLM_API_KEY=your_optional_groq_api_key
+   LLM_MODEL=llama-3.3-70b-versatile
+   ```
+3. Run `bash start_app.sh` and test real Sandbox checkouts using a PayPal Sandbox personal buyer account (`OTP` verification code for the `$220` scenario is `123456`).
+
+---
+
+## Deployment
+
+### Backend (`Render`)
+A ready-to-use Blueprint lives in [`render.yaml`](render.yaml):
+- **Build:** `pip install -r requirements-api.txt`
+- **Start:** `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
+- **Health Check:** `/api/health`
+- Configure `PAYPAL_ENV=sandbox`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `FINSHEILD_CORS_ORIGINS`, and optional `LLM_*` secrets in Render.
+
+### Frontend (`Vercel`)
+Deploy `frontend/` on Vercel with `NEXT_PUBLIC_API_URL` (or backend rewrite) pointing to your deployed FastAPI URL.
+
+---
+
+## Testing & Verification
+
+```bash
+# Backend + PayPal flow + Agent guardrail suite (36 tests)
+PYTHONPATH=.:src pytest backend/tests/ -q
+
+# Full ML + Backend test suite
+PYTHONPATH=.:src pytest -q
+
+# Frontend TypeScript check & production build
+cd frontend && npx tsc --noEmit && npm run build
 ```
 
 ---
 
-## Performance Evaluation
+## API Surface
 
-The core supervised model was trained and evaluated on the real-world **Kaggle ULB Credit Card Fraud Dataset**.
-
-- **Dataset Specs**: 284,807 transactions, 492 fraud cases (0.17% fraud rate).
-- **Split Strategy**: 70% Train / 15% Validation / 15% Test (Seed 42).
-- **Preprocessing**: StandardScaler fitted exclusively on the training split to prevent data leakage.
-
-### Real ULB Benchmark Results
-
-| Model | ROC-AUC | PR-AUC | F1-Score | Precision | Recall |
-|-------|---------|--------|----------|-----------|--------|
-| **XGBoost** (FinSheild) | **0.9709** | **0.8418** | **0.8467** | **0.9206** | **0.7838** |
-| Logistic Regression (Baseline) | 0.9495 | 0.7005 | 0.7407 | - | - |
-
-*XGBoost Confusion Matrix: True Negatives: 42,643 | False Positives: 5 | False Negatives: 16 | True Positives: 58*
-
-### Synthetic Stress Tests
-
-To ensure robustness against shifting fraud patterns, the model is tested against varying synthetic scenarios with different class overlaps and imbalances.
-
-```mermaid
-flowchart LR
-    E[Easy Synthetic\n11.5% fraud\nPR-AUC 0.959] --> D[Diluted Synthetic\n1.07% fraud\nPR-AUC 0.553]
-    D --> H[Hard Overlap\n1.10% fraud\nPR-AUC 0.373]
-    H -.-> R[Real ULB Benchmark\n0.17% fraud\nPR-AUC 0.8418]
-```
-
-*Note: The "Hard Overlap" scenario is intentionally designed to be more difficult than real-world conditions.*
+| Surface | Prefix | Endpoints | Highlights |
+| :--- | :--- | :---: | :--- |
+| **PayPal Pre-Delivery Gate** | `/api/paypal/*` | `16` | Order create, `AUTHORIZE`, capture, void (`204`), OTP verify, human approve, disputes, webhooks |
+| **Guarded Analyst Agent** | `/api/agent/*` | `5` | OpenAI-compatible tool-calling chat, pending action list, human `approve` / `reject` |
+| **Risk Engine & Forensics** | `/api/*` | `13` | Transaction scoring, SHAP explain, NetworkX graph, identity baseline, ULB metrics |
 
 ---
 
-## Deterministic Rules & Risk Weights
-
-The Fusion Engine combines signals using the following weights:
-- **XGBoost**: 35%
-- **Isolation Forest**: 20%
-- **Deterministic Rules**: 20%
-- **Behavioral Profiling**: 15%
-- **Network Graph**: 10%
-
-**8 Configurable Deterministic Rules**:
-1. `high_velocity`: ≥5 transactions in 5 minutes
-2. `burst_velocity`: ≥8 transactions
-3. `new_device_high_value`: Amount > $500 on a new device
-4. `unusual_amount_zscore`: Amount > 3σ from user mean
-5. `offhours_high_value`: Amount > $1000 during off-hours
-6. `shared_device`: Device linked to multiple disjoint accounts
-7. `location_anomaly`: High geographic distance from usual profile
-8. `rapid_country_switch`: Impossibly fast travel between transactions
-
----
-
-## Project Structure
+## Repository Structure
 
 ```text
-Finsheild/
-├── backend/              # FastAPI app (13 endpoints, auto-discovers ML core)
-├── frontend/             # Next.js 16 + React 19 + Tailwind workstation
-├── start_app.sh          # one-click launcher (backend :8000 + frontend :5173)
-├── src/finsheild/
-│   ├── data/           # loader, preprocessing, stratified splits
-│   ├── model.py        # model registry: logreg, xgboost (500 trees), lightgbm
-│   ├── train.py        # training pipeline with early stopping + threshold tuning
-│   ├── inference.py    # batch and single-row inference
-│   ├── evaluation.py   # PR-AUC, ROC-AUC, confusion matrix, reports
-│   ├── features/       # 36 leakage-safe cols (transactional, behavioral, velocity, device, location)
-│   ├── behavioral/     # per-user profiles + deviation scoring
-│   ├── anomaly/        # IsolationForest (0.05 contamination, trained on legit only)
-│   ├── rules/          # 8 configurable deterministic rules with severity levels
-│   ├── graph/          # NetworkX: user↔account↔device↔merchant shared-device cliques
-│   ├── risk_fusion/    # weighted 5-signal fusion → GREEN/YELLOW/RED decision
-│   ├── explain/        # SHAP TreeExplainer + grounded evidence generation
-│   ├── synthetic_env/  # synthetic fraud scenario generator (entities, transactions, hard overlap)
-│   ├── llm_data/       # evidence→JSON copilot instruction-tuning dataset generator
-│   ├── llm_eval/       # base vs finetuned LLM evaluation
-│   ├── finetune/       # QLoRA r=8, 4-bit quantization, checkpoint resume
-│   ├── compare_llm/    # base vs finetuned comparison
-│   └── export/         # export_all pipeline artifacts
-├── models/             # trained model weights (XGBoost, scaler, thresholds)
-├── evaluation/         # reports (JSON/MD) and figures (PR/ROC curves, confusion matrices)
-├── tests/ + backend/tests/  # 215 unit/integration/API tests
-├── scripts/            # dataset download, synthetic generation, experiment runners
-├── notebooks/colab/    # Colab notebooks for GPU training
-├── config/             # dataset.yaml configuration
-└── docs/               # detailed documentation
+finshield/
+├── backend/
+│   ├── main.py              # FastAPI app + ML core, SHAP, graph & legacy endpoints
+│   ├── paypal/              # Orders v2 client, mapper, SQLite store, stub & router
+│   ├── agent/               # Tool-calling analyst loop + human-approval router
+│   ├── adapters/            # Real ML adapter + fallback scoring adapter
+│   └── tests/               # PayPal flow, client & agent guardrail tests
+├── frontend/
+│   ├── app/                 # Overview (/), /paypal, /agent, /investigate, /command-center, /performance
+│   ├── components/          # FinShield chrome, BrandMark, PayPal checkout studio
+│   └── public/favicon.svg   # FinShield double-slash mark
+├── src/finsheild/           # Offline training, features, rules, NetworkX graph & SHAP core
+├── models/xgboost/          # Tracked ULB XGBoost model, scaler, thresholds & columns
+├── evaluation/              # Tracked ULB benchmark metrics & markdown reports
+├── docs/                    # Architecture decisions, dataset notes & hero asset
+├── render.yaml              # Render deployment blueprint (FastAPI API service)
+└── start_app.sh             # One-command local dev launcher (:8000 + :5173)
 ```
 
 ---
 
-## Quickstart
+## Author & License
 
-### Setup Environment
-
-```bash
-# Initialize virtual environment
-python3 -m venv .venv 
-source .venv/bin/activate
-
-# Install dependencies and dev tools
-pip install -r requirements.txt 
-pip install -e ".[dev]"
-```
-
-### Run Pipeline
-
-```bash
-# 1. Download the Real ULB Dataset
-python scripts/download_dataset.py
-
-# 2. Train the XGBoost Model
-python -m finsheild.train --model xgboost
-
-# 3. Run the test suite (215 tests: ML core + backend API)
-pytest -q
-```
-
-## Full-Stack App
-
-`backend/` (FastAPI — 13 endpoints: health, metrics, scoring, generation, investigation, graph, identity, Cashfree webhooks, demo reset) + `frontend/` (Next.js 16 + React 19 + Tailwind) sit in this repo. The backend auto-discovers the ML core in the repo root (override with `FINSHEILD_CORE_PATH`); without model artifacts it serves honest `DEMO_FALLBACK` labels.
-
-```bash
-# One-click launcher (backend :8000 + frontend :5173)
-bash start_app.sh
-
-# Backend only
-PYTHONPATH=. python -m uvicorn backend.main:app --reload
-
-# Frontend only
-cd frontend; npm install; npm run dev
-
-# Backend API tests
-pytest backend/tests/ -q
-```
-
-Full guide (screens, endpoints, demo walkthrough): `docs/app.md`.
-
----
-
-## Tech Stack
-
-- **Machine Learning**: scikit-learn, XGBoost, LightGBM, IsolationForest
-- **Graph & Analysis**: NetworkX, pandas
-- **Explainability**: SHAP
-- **LLM Finetuning**: Qwen2.5-0.5B-Instruct, PEFT (LoRA r=8), TRL SFTTrainer, bitsandbytes (4-bit quantization), transformers
-- **Backend**: FastAPI, Pydantic v2, Uvicorn
-- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS
-- **Engineering**: pytest, joblib, kagglehub, hatchling
-
----
-
-## Limitations & Roadmap
-
-- **Streaming Ingestion**: The current inference engine supports batch and single-row processing. Direct Kafka/Kinesis streaming integration is planned.
-- **Graph Scalability**: NetworkX is suitable for the current research scale; migration to a distributed graph database (e.g., Neo4j or Amazon Neptune) will be required for enterprise-scale deployments.
-- **LLM Latency**: The LLM copilot currently runs asynchronously due to inference latency.
-
----
-
-## Author
-
-Built by **Riddhi Bantia** — ML engine, API, and frontend in this repo.
-
-## License
-
-This project is licensed under the MIT License.
+Built by **Riddhi Bantia** & contributors. Licensed under the [MIT License](LICENSE).
