@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { AgentConsole } from "@/components/paypal";
 
 export const metadata: Metadata = {
-  title: "FinShield Analyst Agent — human in the loop",
+  title: "Analyst Agent (Prototype) — Human Approval Queue",
   description:
-    "The agent investigates flagged PayPal transactions and proposes capture, void, refund and dispute-evidence actions. A human approves anything that touches money.",
+    "Hackathon prototype copilot that inspects flagged sandbox authorizations and proposes capture, void, refund, and dispute briefs. A human approves anything that moves funds.",
 };
 
 export const dynamic = "force-dynamic";

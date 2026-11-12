@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { CommandCenter } from "@/components/site";
 
 export const metadata: Metadata = {
-  title: "Live Command Center",
+  title: "Operations Console (Simulator)",
   description:
-    "Real-time fraud transaction stream with scenario injection, UPI simulator, and Cashfree webhook ingestion.",
+    "Hackathon simulator console for testing synthetic UPI transfers, sample webhook payloads, and local 5-signal risk scoring.",
 };
 
 // Reads window.location at render (webhook URL box) — render on demand, not at build.

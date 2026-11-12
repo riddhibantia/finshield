@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Architecture } from "@/components/site";
 
 export const metadata: Metadata = {
-  title: "Architecture & Risk Fusion Engine",
+  title: "Prototype Architecture & 5-Signal Risk Engine",
   description:
-    "How the 5-signal fusion engine, SHAP explainability, and entity graph fit together.",
+    "How the hackathon prototype fuses five local signals, SHAP explainability, entity graph forensics, and PayPal Sandbox authorization gating.",
 };
 
 export default function ArchitecturePage() {

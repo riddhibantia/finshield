@@ -1,368 +1,309 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #FF5B35;
-  --color-primary-focus: #A23C27;
-  --color-secondary: #FF795A;
-  --color-secondary-dark: #5E2A1E;
-  --color-ink: #171916;
-  --color-ink-secondary: #2B2D2A;
-  --color-body: #555951;
-  --color-muted: #7F837B;
-  --color-muted-secondary: #92978E;
-  --color-muted-tertiary: #A7AAA3;
-  --color-hairline: #62665F;
-  --color-surface: #F2EFE7;
-  --color-surface-dark: #0D0E0D;
-  --color-surface-alt: #E7E4DB;
-  --color-on-primary: #FFFFFF;
+  --color-primary: #D7F46B;
+  --color-primary-focus: #CBEB54;
+  --color-secondary: #173525;
+  --color-ink: #111814;
+  --color-ink-secondary: #2A3530;
+  --color-body: #5A645F;
+  --color-muted: #7C8781;
+  --color-hairline: #E3E7E5;
+  --color-surface: #FFFFFF;
+  --color-surface-dark: #090E0C;
+  --color-surface-alt: #F5F6F5;
+  --color-on-primary: #0D1611;
 
-  --font-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --font-serif: "Space Grotesk", sans-serif;
-  --font-alt: "Space Grotesk", sans-serif;
 }
 
 :root {
   color-scheme: light;
-  --surface: #F2EFE7;
-  --surface-alt: #E7E4DB;
-  --surface-dark: #0D0E0D;
-  --ink: #171916;
-  --ink-secondary: #2B2D2A;
-  --body: #555951;
-  --muted: #7F837B;
-  --muted-secondary: #92978E;
-  --muted-tertiary: #A7AAA3;
-  --hairline: #62665F;
-  --primary: #FF5B35;
-  --primary-focus: #A23C27;
-  --secondary: #FF795A;
+  --surface: #FFFFFF;
+  --surface-alt: #F5F6F5;
+  --surface-dark: #090E0C;
+  --ink: #111814;
+  --body: #5A645F;
+  --muted: #7C8781;
+  --hairline: #E3E7E5;
+  --primary: #D7F46B;
 }
 
 body {
-  background-color: #F2EFE7;
-  color: #171916;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #FFFFFF;
+  color: #111814;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
+  caret-color: #173525;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Tellnova Technical Grid Background */
-.tellnova-grid {
-  background-color: #F2EFE7;
-  background-image: 
-    linear-gradient(to right, rgba(98, 102, 95, 0.12) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(98, 102, 95, 0.12) 1px, transparent 1px);
-  background-size: 36px 36px;
+::selection {
+  background-color: #D7F46B;
+  color: #0D1611;
 }
 
-.tellnova-grid-dark {
-  background-color: #171916;
-  background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 36px 36px;
+:focus-visible {
+  outline: 2px solid #173525;
+  outline-offset: 2px;
 }
 
-/* Typography Tokens — Engineered for Crisp Fintech Clarity */
-.font-display-hero {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: clamp(48px, 6.5vw, 92px);
-  font-weight: 800;
-  line-height: 0.95;
-  letter-spacing: -0.04em;
+/* Browser surface polish: scrollbars matching emerald/sage neutral palette */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-
-.font-display-sub {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: clamp(32px, 4.5vw, 58px);
-  font-weight: 750;
-  line-height: 1.05;
-  letter-spacing: -0.035em;
+::-webkit-scrollbar-track {
+  background: #F5F6F5;
 }
-
-.font-title-strong {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-}
-
-.font-title-md {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.45;
-  letter-spacing: -0.02em;
-}
-
-.font-quote {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: -0.02em;
-}
-
-.font-nav-link {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9.5px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.85px;
-  text-transform: uppercase;
-}
-
-.font-label-caps {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 1.1px;
-  text-transform: uppercase;
-}
-
-.font-micro-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-}
-
-.font-body-mono {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11.5px;
-  font-weight: 500;
-  line-height: 1.5;
-  font-feature-settings: "tnum" 1, "zero" 1;
-}
-
-.mono {
-  font-family: 'JetBrains Mono', monospace;
-  font-feature-settings: "tnum" 1, "zero" 1;
-}
-
-code, pre {
-  font-family: 'JetBrains Mono', monospace;
-  font-feature-settings: "tnum" 1, "zero" 1;
-}
-
-/* Tellnova Geometric Accents */
-.tellnova-circle-accent {
-  position: absolute;
+::-webkit-scrollbar-thumb {
+  background: #CBD3CE;
   border-radius: 9999px;
-  background-color: #FF5B35;
-  pointer-events: none;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8E9C94;
 }
 
-.tellnova-callout-box {
-  border: 1px solid #FF5B35;
-  background-color: rgba(255, 91, 53, 0.04);
-  border-radius: 11px;
+.mono,
+code,
+pre {
+  font-family: "JetBrains Mono", monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
-.tellnova-terminal {
-  background-color: #171916;
-  color: #F2EFE7;
-  border: 1px solid #2B2D2A;
-  border-radius: 14px;
-  box-shadow: 0 25px 50px -12px rgba(23, 25, 22, 0.25);
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
-.tellnova-terminal input {
-  background-color: #222521;
-  color: #F2EFE7;
-  border: 1px solid #383B36;
-}
-.tellnova-terminal input:focus {
-  border-color: #FF5B35;
-  outline: none;
-}
-
-/* Surfaces & Cards */
-.card {
-  background-color: #FFFFFF;
-  border: 1px solid #D8D4CA;
-  border-radius: 14px;
-  box-shadow: rgba(23, 25, 22, 0.04) 0px 10px 30px 0px;
-}
-
-.card-white {
-  background-color: #FFFFFF;
-  border: 1px solid #D8D4CA;
-  border-radius: 14px;
-  box-shadow: rgba(23, 25, 22, 0.04) 0px 10px 30px 0px;
+/* Hero & Subpage Atmospheric Dark-to-White Fade */
+.fin-hero-atmosphere {
+  background:
+    radial-gradient(62% 52% at 76% 28%, rgba(28, 72, 50, 0.58) 0%, rgba(16, 40, 28, 0.24) 46%, transparent 74%),
+    radial-gradient(48% 42% at 16% 20%, rgba(22, 46, 33, 0.42) 0%, transparent 66%),
+    linear-gradient(
+      180deg,
+      #090E0C 0%,
+      #0B1410 34%,
+      #14241C 52%,
+      #3E4E46 66%,
+      #95A19B 79%,
+      #DCE3DF 89%,
+      #F6F8F7 96%,
+      #FFFFFF 100%
+    );
 }
 
-.card-alt {
-  background-color: #E7E4DB;
-  border: 1px solid #D8D4CA;
-  border-radius: 14px;
+.fin-subpage-atmosphere {
+  background:
+    radial-gradient(60% 70% at 78% 15%, rgba(28, 72, 50, 0.52) 0%, rgba(16, 40, 28, 0.2) 50%, transparent 78%),
+    radial-gradient(45% 55% at 15% 15%, rgba(22, 46, 33, 0.36) 0%, transparent 70%),
+    linear-gradient(
+      180deg,
+      #090E0C 0%,
+      #0D1913 58%,
+      #22352B 78%,
+      #8A9690 91%,
+      #E4E9E6 97%,
+      #FFFFFF 100%
+    );
 }
 
-.card-dark {
-  background-color: #171916;
-  color: #F2EFE7;
-  border: 1px solid #2B2D2A;
-  border-radius: 14px;
+.fin-hero-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.048) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.048) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 88% 82% at 54% 30%, #000 18%, transparent 80%);
+  mask-image: radial-gradient(ellipse 88% 82% at 54% 30%, #000 18%, transparent 80%);
 }
 
-/* Button Tokens */
+.fin-guardrail-banner {
+  background:
+    radial-gradient(68% 95% at 50% 0%, rgba(29, 76, 52, 0.52) 0%, rgba(15, 34, 24, 0.25) 55%, transparent 100%),
+    linear-gradient(180deg, #0B120F 0%, #101C16 100%);
+}
+
+/* Shared Interactive Controls */
 .btn-primary {
-  background-color: #FF5B35;
+  background-color: #173525;
   color: #FFFFFF;
-  border-radius: 11px;
-  padding: 12px 24px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  transition: all 0.15s ease;
+  border-radius: 9999px;
+  padding: 10px 20px;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: background-color 0.15s ease;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-.btn-primary:hover, .btn-primary:active {
-  background-color: #A23C27;
+.btn-primary:hover {
+  background-color: #1F4732;
+}
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .btn-secondary {
-  background-color: transparent;
-  color: #FF5B35;
-  border: 1px solid #FF5B35;
-  border-radius: 11px;
-  padding: 10px 20px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  transition: all 0.15s ease;
+  background-color: #FFFFFF;
+  color: #111814;
+  border: 1px solid #DCE2DF;
+  border-radius: 9999px;
+  padding: 9px 18px;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .btn-secondary:hover {
-  background-color: rgba(255, 91, 53, 0.08);
+  border-color: #173525;
+  background-color: #F5F6F5;
 }
 
-/* Badges & Chips */
 .badge-pill {
-  background-color: #E7E4DB;
-  color: #171916;
+  background-color: #F2F4F3;
+  color: #2A3530;
   border-radius: 9999px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 1.35px;
-  text-transform: uppercase;
-  padding: 3px 9px;
-  border: 1px solid rgba(98, 102, 95, 0.25);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 4px 10px;
+  border: 1px solid #E3E7E5;
 }
 
-.risk-LOW {
-  color: #1B5E20;
-  background-color: rgba(46, 125, 50, 0.1);
-  border: 1px solid rgba(46, 125, 50, 0.3);
-}
-
-.risk-MEDIUM {
-  color: #B7791F;
-  background-color: rgba(183, 121, 31, 0.12);
-  border: 1px solid rgba(183, 121, 31, 0.35);
-}
-
-.risk-HIGH {
-  color: #C53030;
-  background-color: rgba(197, 48, 48, 0.12);
-  border: 1px solid rgba(197, 48, 48, 0.35);
-}
-
-.risk-CRITICAL {
-  color: #FF5B35;
-  background-color: rgba(255, 91, 53, 0.14);
-  border: 1px solid rgba(255, 91, 53, 0.5);
-  font-weight: 700;
-}
-
-.src-LIVE_MODEL {
-  color: #1B5E20;
-  border: 1px solid rgba(46, 125, 50, 0.35);
-  background-color: rgba(46, 125, 50, 0.08);
-}
-
-.src-DEMO_FALLBACK {
-  color: #B7791F;
-  border: 1px solid rgba(183, 121, 31, 0.35);
-  background-color: rgba(183, 121, 31, 0.08);
-}
-
-/* Inputs from spec */
-input, select {
+input,
+select {
   background-color: #FFFFFF;
-  border: 1px solid rgba(98, 102, 95, 0.4);
-  border-radius: 7px;
-  color: #171916;
+  border: 1px solid #DCE2DF;
+  border-radius: 10px;
+  color: #111814;
+  caret-color: #173525;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
 }
-input:focus, select:focus {
-  border-color: #FF5B35;
+input:focus,
+select:focus {
+  border-color: #173525;
   outline: none;
 }
 
-/* Plain-language tooltip (hover the dotted term) */
-.tip { position: relative; display: inline-flex; align-items: center; gap: 4px; cursor: help; }
-.tip-dots { border-bottom: 1px dotted #7F837B; }
+/* Inline Explainer Tooltip */
+.tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: help;
+}
+.tip-dots {
+  border-bottom: 1px dotted #7C8781;
+}
 .tip-box {
-  visibility: hidden; opacity: 0; transition: opacity 0.12s ease;
-  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-  width: max-content; max-width: 240px; white-space: normal;
-  background: #171916; color: #F2EFE7; font-size: 11px; line-height: 1.5;
-  padding: 8px 10px; border-radius: 8px; z-index: 50; pointer-events: none;
-  font-family: 'Inter', sans-serif; font-weight: 400; letter-spacing: 0; text-transform: none;
-  box-shadow: 0 10px 25px rgba(23, 25, 22, 0.3);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 240px;
+  white-space: normal;
+  background: #0D1611;
+  color: #F4F6F0;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  border-radius: 10px;
+  z-index: 50;
+  pointer-events: none;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  text-transform: none;
+  box-shadow: 0 12px 28px rgba(9, 14, 12, 0.28);
 }
-.tip:hover .tip-box, .tip:focus-within .tip-box { visibility: visible; opacity: 1; }
+.tip:hover .tip-box,
+.tip:focus-within .tip-box {
+  visibility: visible;
+  opacity: 1;
+}
 
-/* Footer full-bleed block */
+/* Footer */
 .tellnova-footer {
-  background-color: #171916;
-  color: #F2EFE7;
-  border-top: 1px solid #62665F;
+  background-color: #090E0C;
+  color: #F4F6F0;
+  border-top: 1px solid #1B2921;
 }
 
-/* ---- FinShield decision-panel motion system ---- */
+/* Motion */
 @keyframes fin-fade-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.fin-fade-up { animation: fin-fade-up .38s ease-out both; }
-
-@keyframes fin-stamp-in {
-  0% { opacity: 0; transform: scale(1.7) rotate(-14deg); }
-  60% { opacity: 1; transform: scale(.92) rotate(-7deg); }
-  100% { opacity: 1; transform: scale(1) rotate(-7deg); }
+.fin-fade-up {
+  animation: fin-fade-up 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.fin-stamp { animation: fin-stamp-in .5s cubic-bezier(.2,.8,.3,1.15) both; }
 
-@keyframes fin-bar-grow { from { width: 0; } }
-.fin-bar { animation: fin-bar-grow .8s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes fin-bar-grow {
+  from {
+    width: 0;
+  }
+}
+.fin-bar {
+  animation: fin-bar-grow 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
 
-@keyframes fin-shimmer { 0% { background-position: -320px 0; } 100% { background-position: 320px 0; } }
+@keyframes fin-shimmer {
+  0% {
+    background-position: -320px 0;
+  }
+  100% {
+    background-position: 320px 0;
+  }
+}
 .fin-skeleton {
-  background: linear-gradient(90deg, #E7E4DB 25%, #F2EFE7 50%, #E7E4DB 75%);
+  background: linear-gradient(90deg, #ECEEED 25%, #F6F7F6 50%, #ECEEED 75%);
   background-size: 640px 100%;
   animation: fin-shimmer 1.15s linear infinite;
 }
 
-@keyframes fin-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-.fin-pulse { animation: fin-pulse 1.4s ease-in-out infinite; }
+@keyframes fin-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.fin-pulse {
+  animation: fin-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fin-fade-up,
+  .fin-bar,
+  .fin-skeleton,
+  .fin-pulse {
+    animation: none !important;
+  }
+}

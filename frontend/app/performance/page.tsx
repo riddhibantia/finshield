@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Performance } from "@/components/site";
 
 export const metadata: Metadata = {
-  title: "Model Performance Observatory",
+  title: "Model Observatory (Offline ULB Benchmark)",
   description:
-    "XGBoost ROC-AUC 0.9709 on the real ULB benchmark plus synthetic stress-test results.",
+    "Offline XGBoost evaluation (ROC-AUC 0.9709) on the public ULB dataset plus synthetic stress-test results.",
 };
 
 export default function PerformancePage() {

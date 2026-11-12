@@ -34,7 +34,7 @@ let clientStore: Rec[] = [
       xgb_score: 0.002,
       graph_score: 0.06,
       evidence: ["Everyday micro-payment (₹45.00) verified safe", "Hardware fingerprint matched user profile"],
-      source: "LIVE_MODEL",
+      source: "DEMO_FALLBACK",
     },
   },
   {
@@ -72,7 +72,7 @@ let clientStore: Rec[] = [
         "Velocity surge: 7 transactions in 5-minute window",
         "Shared device hardware cluster across 4 distinct accounts",
       ],
-      source: "LIVE_MODEL",
+      source: "DEMO_FALLBACK",
     },
   },
 ];
@@ -128,38 +128,46 @@ function clientScore(txn: Record<string, any>, scenario = "normal"): Rec {
   const amt = Number(txn.amount) || 0;
   const vel = Number(txn.velocity) || 1;
   const dev = String(txn.device_id || "").toUpperCase();
+  const currency = String(txn.currency || (txn.channel === "PAYPAL" ? "USD" : "INR")).toUpperCase();
+  const isUsd = currency === "USD";
+  const isPayPal = txn.gateway === "PayPal" || txn.channel === "PAYPAL";
   const isShared = dev.includes("SHARED") || scenario === "fraud_ring";
-  const isLarge = amt >= 100000;
-  const isMicro = amt <= 500;
+  const isLarge = isUsd ? amt >= 1200 : amt >= 100000;
+  const isMicro = isUsd ? amt <= 60 : amt <= 500;
 
   const rules: string[] = [];
   const evidence: string[] = [];
 
   if (isLarge) {
-    rules.push("UPI_HIGH_VALUE_ANOMALY");
-    rules.push("EXCEEDS_SINGLE_TRANSACTION_LIMIT");
-    evidence.push(`High-Value Anomaly: ₹${amt.toLocaleString("en-IN")} exceeds standard single-transaction threshold (₹1 Lakh)`);
+    if (isPayPal || isUsd) {
+      rules.push("HIGH_VALUE_SPIKE", "AMOUNT_LIMIT_EXCEEDED");
+      evidence.push(`High-Value Anomaly: $${amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} exceeds standard authorization baseline`);
+    } else {
+      rules.push("UPI_HIGH_VALUE_ANOMALY", "EXCEEDS_SINGLE_TRANSACTION_LIMIT");
+      evidence.push(`High-Value Anomaly: ₹${amt.toLocaleString("en-IN")} exceeds standard single-transaction threshold (₹1 Lakh)`);
+    }
   }
   if (vel >= 5) {
-    rules.push("HIGH_VELOCITY");
+    rules.push(isPayPal ? "HIGH_ACTIVITY" : "HIGH_VELOCITY");
     evidence.push(`Elevated velocity: ${vel} transactions in 5-minute window`);
   }
   if (isShared) {
-    rules.push("SHARED_DEVICE_MULTI_ACCOUNT");
-    evidence.push("Hardware fingerprint linked to multiple accounts (Mule Ring)");
+    rules.push(isPayPal ? "LINKED_DEVICE_CLUSTER" : "SHARED_DEVICE_MULTI_ACCOUNT");
+    evidence.push("Hardware fingerprint linked to multiple accounts");
   }
 
   let riskScore = isLarge ? 0.89 : isMicro ? 0.035 : isShared ? 0.87 : scenario === "suspicious" ? 0.91 : 0.045;
   if (!rules.length && isMicro) {
-    evidence.push(`Everyday transaction (₹${amt.toFixed(2)}) verified safe`);
-    evidence.push("Amount and velocity within standard UPI parameters");
+    const amtFmt = isUsd ? `$${amt.toFixed(2)}` : `₹${amt.toFixed(2)}`;
+    evidence.push(`Everyday transaction (${amtFmt}) verified safe`);
+    evidence.push(isPayPal ? "Amount and velocity within standard buyer profile" : "Amount and velocity within standard UPI parameters");
   }
 
   const level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" =
     riskScore >= 0.8 ? "CRITICAL" : riskScore >= 0.6 ? "HIGH" : riskScore >= 0.3 ? "MEDIUM" : "LOW";
 
   const rec: Rec = {
-    transaction: txn,
+    transaction: { ...txn, currency },
     context: { scenario },
     score: {
       transaction_id: String(txn.transaction_id || `TX-${Date.now()}`),
@@ -179,23 +187,24 @@ function clientScore(txn: Record<string, any>, scenario = "normal"): Rec {
       xgb_score: isLarge ? 0.92 : 0.002,
       graph_score: isShared ? 0.88 : 0.06,
       evidence,
-      source: "LIVE_MODEL",
+      source: "DEMO_FALLBACK",
     },
   };
   clientStore.unshift(rec);
   return rec;
 }
 
+const INITIAL_STORE_IDS = new Set(clientStore.map((r) => String(r.transaction.transaction_id)));
+
 async function req(path: string, init?: RequestInit) {
+  let r: Response;
   try {
-    const r = await fetch(`${API}${path}`, {
+    r = await fetch(`${API}${path}`, {
       ...init,
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     });
-    if (!r.ok) throw new Error(`${r.status}`);
-    return await r.json();
   } catch {
-    // Client-Side Fallback Engine
+    // Network failure (backend offline) — use deterministic client fallback
     if (path === "/api/health") {
       return {
         status: "ok",
@@ -206,7 +215,7 @@ async function req(path: string, init?: RequestInit) {
           graph: true,
           shap: true,
           llm_adapter: true,
-          detail: { has_model_file: true, note: "FinShield Production Engine Active" },
+          detail: { has_model_file: true, note: "Client-side simulation fallback active (backend offline)" },
         },
       };
     }
@@ -244,8 +253,10 @@ async function req(path: string, init?: RequestInit) {
       return clientScore(txn, scenario);
     }
     if (path.startsWith("/api/transactions/")) {
-      const id = path.split("/").pop();
-      return clientStore.find((r) => r.transaction.transaction_id === id) || clientStore[0];
+      const id = decodeURIComponent(path.split("/").pop() || "");
+      const found = clientStore.find((rec) => rec.transaction.transaction_id === id);
+      if (!found) throw new Error("Not found");
+      return found;
     }
     if (path === "/api/investigation/explain") {
       return offlineExplain(JSON.parse((init?.body as string) || "{}"));
@@ -254,16 +265,21 @@ async function req(path: string, init?: RequestInit) {
       return offlineIdentity(decodeURIComponent(path.split("/").pop() || "U-00001"));
     }
     if (path.startsWith("/api/graph/")) {
-      // Same shape as backend graph_for(): nodes + from/to edges + kind.
       const txnId = decodeURIComponent(path.split("/").pop() || "TX-INIT-001");
-      const rec = clientStore.find((r) => r.transaction.transaction_id === txnId) || clientStore[0];
+      const rec = clientStore.find((rec) => rec.transaction.transaction_id === txnId);
+      if (!rec) return { nodes: [], edges: [], kind: "DEMO_SIMULATION", summary: { topology_type: "Unknown", connected_entities: 0 } };
       const txn = rec.transaction as Record<string, any>;
+      const currency = String(txn.currency || (txn.channel === "PAYPAL" ? "USD" : "INR")).toUpperCase();
+      const amtFmt =
+        currency === "USD"
+          ? `$${Number(txn.amount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : `₹${Number(txn.amount || 0).toLocaleString("en-IN")}`;
       const shared = String(txn.device_id || "").includes("SHARED");
       return {
         nodes: [
           { id: `user:${txn.user_id}`, label: String(txn.user_id), type: "user", role: "Primary Account Holder", risk: shared ? "SUSPICIOUS" : "SAFE", details: { user_id: txn.user_id } },
           { id: `dev:${txn.device_id}`, label: String(txn.device_id), type: "device", role: shared ? "Shared Hardware" : "Known Device", risk: shared ? "CRITICAL" : "SAFE", details: { fingerprint: "SHA256:7f9a…c09d", linked_accounts: shared ? 4 : 1 } },
-          { id: txnId, label: `₹${Number(txn.amount || 0).toLocaleString("en-IN")}`, type: "transaction", role: "Payment Under Review", risk: rec.score.risk_level, details: { transaction_id: txnId, amount: txn.amount, risk_score: rec.score.risk_score } },
+          { id: txnId, label: amtFmt, type: "transaction", role: "Payment Under Review", risk: rec.score.risk_level, details: { transaction_id: txnId, amount: amtFmt, risk_score: rec.score.risk_score } },
           { id: `merch:${txn.merchant}`, label: String(txn.merchant), type: "merchant", role: "Counterparty", risk: "INFO", details: { merchant_name: txn.merchant, category: txn.merchant_category } },
         ],
         edges: [
@@ -273,7 +289,7 @@ async function req(path: string, init?: RequestInit) {
           { from: txnId, to: `merch:${txn.merchant}`, label: "SETTLES_TO", is_suspicious: false },
         ],
         kind: "DEMO_SIMULATION",
-        note: "Offline simulation graph — same shape as the live engine returns.",
+        note: "Offline simulation graph — same schema returned by the local FastAPI backend.",
         summary: { topology_type: shared ? "Shared-Device Cluster" : "Single-Payer Chain", connected_entities: 4 },
       };
     }
@@ -281,14 +297,14 @@ async function req(path: string, init?: RequestInit) {
       let body: any = {};
       try {
         body = JSON.parse((init?.body as string) || "{}");
-      } catch (e) {}
+      } catch {}
       const data = body.data || {};
       const payment = data.payment || {};
       const order = data.order || {};
       const amount = Number(payment.payment_amount || order.order_amount || body.amount || 75.0);
       const upi_id = payment.payment_method?.upi?.upi_id || body.upi_id || "riddhi@okhdfcbank";
       const cf_id = payment.cf_payment_id || `CF-${Date.now()}`;
-      
+
       const txn = {
         transaction_id: `CF-${cf_id}`,
         user_id: upi_id,
@@ -318,12 +334,14 @@ async function req(path: string, init?: RequestInit) {
       return clientScore(body);
     }
     if (path === "/api/demo/reset") {
-      clientStore = clientStore.slice(0, 5);
+      clientStore = clientStore.filter((rec) => INITIAL_STORE_IDS.has(String(rec.transaction.transaction_id)));
       return { ok: true };
     }
     if (path === "/api/paypal/config") {
-      // Honest offline state — never fake a PayPal order id.
       return { environment: "offline", sdk_url: "", client_id: "", enabled: false };
+    }
+    if (path.startsWith("/api/paypal/orders/") && path.endsWith("/cancel")) {
+      return { status: "CANCELLED", offline: true };
     }
     if (path === "/api/paypal/disputes" || path.startsWith("/api/paypal/intents")) {
       return { disputes: [], intents: [] };
@@ -337,8 +355,18 @@ async function req(path: string, init?: RequestInit) {
     if (path.startsWith("/api/agent/actions")) {
       return { actions: [] };
     }
-    return {};
+    throw new Error("Backend API is offline.");
   }
+
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try {
+      const errJson = await r.json();
+      if (errJson?.detail) detail = String(errJson.detail);
+    } catch {}
+    throw new Error(detail);
+  }
+  return await r.json();
 }
 
 export const api = {
@@ -346,16 +374,16 @@ export const api = {
   metrics: () => req("/api/model/metrics"),
   generate: (scenario: string) => req(`/api/transactions/generate?scenario=${scenario}`, { method: "POST" }),
   list: () => req("/api/transactions"),
-  get: (id: string) => req(`/api/transactions/${id}`),
+  get: (id: string) => req(`/api/transactions/${encodeURIComponent(id)}`),
   explain: (body: object) => req("/api/investigation/explain", { method: "POST", body: JSON.stringify(body) }),
-  graph: (id: string) => req(`/api/graph/${id}`),
+  graph: (id: string) => req(`/api/graph/${encodeURIComponent(id)}`),
   score: (txn: Record<string, unknown>, scenario?: string) =>
     req(`/api/transaction/score?scenario=${scenario || "normal"}`, { method: "POST", body: JSON.stringify(txn) }),
   cashfreeWebhook: (payload: object) =>
     req("/api/webhooks/cashfree", { method: "POST", body: JSON.stringify(payload) }),
   cashfreeSimulate: (params: { amount: number; status?: string; upi_id?: string }) =>
     req(`/api/webhooks/cashfree/simulate?amount=${params.amount}&status=${params.status || "SUCCESS"}&upi_id=${encodeURIComponent(params.upi_id || "riddhi@okhdfcbank")}`, { method: "POST" }),
-  identity: (uid: string) => req(`/api/identity/${uid}`),
+  identity: (uid: string) => req(`/api/identity/${encodeURIComponent(uid)}`),
   reset: () => req("/api/demo/reset", { method: "POST" }),
 
   // ---- PayPal fulfilment shield ----
@@ -363,7 +391,9 @@ export const api = {
   paypalCreateOrder: (body: { scenario: string; amount?: string; currency?: string; device_id?: string; email?: string; return_url?: string }) =>
     req("/api/paypal/orders", { method: "POST", body: JSON.stringify(body) }),
   paypalAuthorize: (orderId: string, body: { device_id?: string; email_hash?: string } = {}) =>
-    req(`/api/paypal/orders/${orderId}/authorize`, { method: "POST", body: JSON.stringify(body) }),
+    req(`/api/paypal/orders/${encodeURIComponent(orderId)}/authorize`, { method: "POST", body: JSON.stringify(body) }),
+  paypalCancel: (orderId: string) =>
+    req(`/api/paypal/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST" }),
   paypalIntents: () => req("/api/paypal/intents"),
   paypalIntent: (id: string) => req(`/api/paypal/intents/${id}`),
   paypalVerifyOtp: (intentId: string, otp: string) =>

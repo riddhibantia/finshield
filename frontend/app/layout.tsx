@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 const SITE_URL = "https://finshield-demo.vercel.app";
-const SITE_NAME = "FinShield — Multi-Signal Fraud Defense Platform";
+const SITE_NAME = "FinShield — PayPal Post-Authorization Shield (Hackathon Prototype)";
 const SITE_DESC =
-  "Real-time fraud defense for digital payments: XGBoost + 5-signal risk fusion, SHAP explainability, entity graph forensics, and an AI investigation copilot. Live interactive demo.";
+  "PayPal Hackathon Prototype: post-authorization fulfilment shield using PayPal Sandbox, XGBoost + 5-signal risk fusion, SHAP explainability, entity graph forensics, and a human-approved analyst agent.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -40,7 +40,11 @@ export const metadata: Metadata = {
     description: SITE_DESC,
     images: ["/favicon.svg"],
   },
-  icons: { icon: "/favicon.svg?v=2" },
+  icons: {
+    icon: [{ url: "/favicon.svg?v=3", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg?v=3",
+    apple: "/favicon.svg?v=3",
+  },
 };
 
 const JSON_LD = {
@@ -61,7 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..800&family=JetBrains+Mono:ital,wght@0,400..800;1,400..800&family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..800&family=Space+Grotesk:wght@500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..700;1,14..32,400..700&family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
       </head>
