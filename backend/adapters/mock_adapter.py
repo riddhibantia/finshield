@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import math
 
-from ..currency import engine_amount, format_amount
+from ..currency import DEFAULT_FX_FALLBACK, FX_TO_INR, engine_amount, format_amount
 from ..schemas import ScoreResult, Signal, Transaction
 
 
@@ -37,15 +37,20 @@ class MockMLAdapter:
 
         amt = float(getattr(txn, "amount", 0) or 0)
         currency = str(getattr(txn, "currency", "INR") or "INR").upper()
+        fx_rate = FX_TO_INR.get(currency, DEFAULT_FX_FALLBACK)
         amt_engine = engine_amount(amt, currency)  # rule thresholds are INR-scale
         usual_amt = float(getattr(txn, "usual_amount", 0) or ctx.get("usual_amount", 3800.0) or 3800.0)
-        amt_dev = float(ctx.get("amount_deviation", amt / usual_amt if usual_amt > 0 else 1.0))
+        usual_display = usual_amt if currency == "INR" else usual_amt / fx_rate
+        amt_dev = float(ctx.get("amount_deviation", amt_engine / usual_amt if usual_amt > 0 else 1.0))
         vel = float(txn.velocity or ctx.get("recent_transaction_count", 1) or 1)
         dev = str(getattr(txn, "device_id", "")).upper()
-        is_new_device = bool("NEW" in dev or getattr(txn, "is_new_device", False) or scenario in ("suspicious", "fraud_ring"))
-        is_shared = bool("SHARED" in dev or "DEV-X" in dev or getattr(txn, "is_shared_device", False) or scenario == "fraud_ring")
+        is_new_device = bool("NEW" in dev or getattr(txn, "is_new_device", False) or ctx.get("is_new_device", False) or scenario in ("suspicious", "fraud_ring"))
+        is_shared = bool("SHARED" in dev or "DEV-X" in dev or getattr(txn, "is_shared_device", False) or ctx.get("is_shared_device", False) or int(ctx.get("shared_device_accounts", 0) or 0) >= 2 or scenario == "fraud_ring")
         loc = str(getattr(txn, "location", "")).lower()
-        dist_km = float(getattr(txn, "distance_km", 0) or (400.0 if "400" in loc else (120.0 if "120" in loc else (0.0 if ("home" in loc or "same" in loc) else 5.0))))
+        dist_km = float(getattr(txn, "distance_km", 0) or ctx.get("distance_km", 0) or (400.0 if "400" in loc else (120.0 if "120" in loc else (0.0 if ("home" in loc or "same" in loc) else 5.0))))
+        channel = str(getattr(txn, "channel", "UPI") or "UPI").upper()
+        gateway = str(getattr(txn, "gateway", "") or "")
+        is_upi_inr = currency == "INR" and gateway != "PayPal" and channel != "PAYPAL"
 
         rules: list[str] = []
         evidence: list[str] = []
@@ -69,15 +74,19 @@ class MockMLAdapter:
 
         if amt_dev >= 3.0 or amt_engine >= 3.0 * usual_amt:
             rules.append("UNUSUAL_AMOUNT")
-            evidence.append(f"Amount deviation: {format_amount(amt, currency)} is {amt_dev:.1f}× usual baseline ({format_amount(usual_amt, currency)})")
+            evidence.append(f"Amount deviation: {format_amount(amt, currency)} is {amt_dev:.1f}× usual baseline ({format_amount(usual_display, currency)})")
 
         if dist_km >= 300 or "foreign" in loc:
             rules.append("UNUSUAL_LOCATION")
             evidence.append(f"Geographic jump: location is ~{int(dist_km or 400)}km from home")
 
         if amt_engine >= 100000:
-            rules.append("UPI_HIGH_VALUE_ANOMALY")
-            rules.append("EXCEEDS_SINGLE_TRANSACTION_LIMIT")
+            if is_upi_inr:
+                rules.append("UPI_HIGH_VALUE_ANOMALY")
+                rules.append("EXCEEDS_SINGLE_TRANSACTION_LIMIT")
+            else:
+                rules.append("HIGH_VALUE_SPIKE")
+                rules.append("AMOUNT_LIMIT_EXCEEDED")
             evidence.append(f"High-Value Anomaly: {format_amount(amt, currency)} exceeds standard single-transaction threshold")
 
         if scenario == "suspicious" and not rules:

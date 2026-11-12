@@ -33,20 +33,23 @@ def _rolling_window_counts(tx: pd.DataFrame,
     df["_orig_idx"] = np.arange(len(df))
     df = df.sort_values([group_col, time_col, "txn_id"]).reset_index(drop=True)
 
+    # Normalize timestamps to nanoseconds before int64 conversion so pandas 2.x
+    # (datetime64[ns]) and pandas 3.x (datetime64[us]) agree on window units.
+    ts_series = (
+        df[time_col]
+        if pd.api.types.is_datetime64_any_dtype(df[time_col])
+        else pd.to_datetime(df[time_col])
+    )
+    ts_ns_all = ts_series.dt.as_unit("ns").astype("int64")
+    _scale = 1_000_000_000
+
     for w in windows_seconds:
         counts_sorted = np.zeros(len(df), dtype="int32")
         amounts_sorted = np.zeros(len(df), dtype="float64")
-        # ts is datetime64 (usually ns under pandas 2.x). Convert the window
-        # to the same integer units returned by .astype("int64").
-        try:
-            _unit = str(df[time_col].dtype.unit)  # 's', 'ms', 'us', 'ns'
-        except Exception:
-            _unit = "ns"
-        _scale = {"s": 1, "ms": 1_000, "us": 1_000_000, "ns": 1_000_000_000}.get(_unit, 1_000_000_000)
         w_units = int(w) * _scale
         for gid, idx_block in df.groupby(group_col, sort=False).groups.items():
             block = df.loc[idx_block]
-            ts = block[time_col].astype("int64").to_numpy()
+            ts = ts_ns_all.loc[idx_block].to_numpy()
             amt = block["amount"].to_numpy(dtype="float64")
             n = len(block)
             j = 0

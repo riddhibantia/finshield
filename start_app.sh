@@ -16,7 +16,7 @@ fi
 
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 export VITE_API_URL="${VITE_API_URL:-http://127.0.0.1:$BACKEND_PORT}"
-export PYTHONPATH="$ROOT"
+export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$ROOT:$ROOT/src"
 
 echo "Starting FinSheild Backend with $PY..."
 "$PY" -m uvicorn backend.main:app --host 127.0.0.1 --port "$BACKEND_PORT" &

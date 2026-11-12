@@ -55,34 +55,100 @@ def _chat(base_url: str, api_key: str, model: str, messages: list[dict[str, Any]
 
 def _fallback_reply(user_text: str) -> dict[str, Any]:
     """Deterministic investigation when no LLM key is configured."""
+    from ..paypal import store as pp_store
+
     tool_trace: list[dict[str, Any]] = []
     high = execute_tool("list_high_risk_transactions", {"min_score": 0.6})
     tool_trace.append({"tool": "list_high_risk_transactions", "result_summary": f"{high.get('count', 0)} high-risk records"})
-    pending = execute_tool("list_high_risk_transactions", {"min_score": 0})  # full list for counts
-    total = pending.get("count", 0)
+    all_recs = execute_tool("list_high_risk_transactions", {"min_score": 0})
+    all_rows = all_recs.get("transactions") or []
+    pp_rows = [r for r in all_rows if r.get("paypal_order_id")]
+    actions = pp_store.list_actions(limit=200)
+
+    refunded_caps = {
+        a.get("capture_id")
+        for a in actions
+        if a.get("kind") == "REFUND" and a.get("status") in ("PENDING", "EXECUTED") and a.get("capture_id")
+    }
+    void_auths = {
+        a.get("authorization_id")
+        for a in actions
+        if a.get("kind") in ("VOID", "CAPTURE") and a.get("status") in ("PENDING", "EXECUTED") and a.get("authorization_id")
+    }
 
     lowered = user_text.lower()
-    if "void" in lowered:
-        intent = "void risky authorizations before delivery"
+    if "void" in lowered or "critical" in lowered or "review" in lowered:
+        intent_label = "void risky held authorizations before delivery"
     elif "refund" in lowered:
-        intent = "refund specific captures"
+        intent_label = "refund captured payments not yet refunded"
+    elif "capture" in lowered:
+        intent_label = "capture verified held authorizations"
     elif "dispute" in lowered or "evidence" in lowered:
-        intent = "draft dispute evidence packages"
+        intent_label = "summarize disputes and compile evidence briefs"
     else:
-        intent = "review the current fulfilment queue"
+        intent_label = "review the current fulfilment queue"
 
     lines = [
-        f"Analyst (deterministic mode, source=DEMO_FALLBACK): {total} fulfilment records on file, {high.get('count', 0)} above risk 0.6.",
-        f"Your request maps to: {intent}.",
+        f"Analyst (deterministic mode, source=DEMO_FALLBACK): {len(pp_rows)} PayPal orders ({high.get('count', 0)} total high-risk records across PayPal & simulator).",
+        f"Focus: {intent_label}.",
     ]
-    for row in (high.get("transactions") or [])[:3]:
+    for row in (high.get("transactions") or [])[:4]:
         lines.append(
             f"- {row.get('txn_id')}: score {row.get('risk_score')} ({row.get('risk_level')}), status {row.get('status')}, amount {row.get('amount')} {row.get('currency')}"
         )
+
+    if "void" in lowered or "critical" in lowered or ("review" in lowered and "refund" not in lowered and "dispute" not in lowered):
+        held_risky = [
+            r for r in pp_rows
+            if r.get("status") in ("HELD_REVIEW", "HELD_STEP_UP", "AUTHORIZED")
+            and r.get("authorization_id")
+            and ((r.get("risk_score") or 0) >= 0.6 or "void" in lowered)
+            and r.get("authorization_id") not in void_auths
+        ]
+        if held_risky:
+            for target in held_risky[:2]:
+                proposal = execute_tool("propose_void", {
+                    "authorization_id": target["authorization_id"],
+                    "reason": f"High-risk held authorization ({target.get('txn_id')}, score {target.get('risk_score')}) — void before digital fulfilment",
+                })
+                tool_trace.append({"tool": "propose_void", "result_summary": proposal["proposal_id"]})
+                lines.append(
+                    f"Proposed VOID on authorization {target['authorization_id']} ({target.get('amount')} {target.get('currency')}) — proposal {proposal['proposal_id']} is PENDING human approval."
+                )
+        else:
+            already_voided = [r for r in pp_rows if r.get("status") == "VOIDED"]
+            if already_voided:
+                lines.append(
+                    f"All critical/held PayPal authorizations are already handled ({len(already_voided)} already auto-voided before delivery)."
+                )
+            else:
+                lines.append("No held high-risk PayPal authorizations awaiting a void proposal.")
+
+    elif "capture" in lowered and "refund" not in lowered:
+        held_ok = [
+            r for r in pp_rows
+            if r.get("status") in ("HELD_REVIEW", "HELD_STEP_UP", "AUTHORIZED")
+            and r.get("authorization_id")
+            and (r.get("risk_score") or 0) < 0.8
+            and r.get("authorization_id") not in void_auths
+        ]
+        if held_ok:
+            target = held_ok[0]
+            proposal = execute_tool("propose_capture", {
+                "authorization_id": target["authorization_id"],
+                "reason": f"Capture held authorization ({target.get('txn_id')}, score {target.get('risk_score')}) per analyst request",
+            })
+            tool_trace.append({"tool": "propose_capture", "result_summary": proposal["proposal_id"]})
+            lines.append(
+                f"Proposed CAPTURE on authorization {target['authorization_id']} ({target.get('amount')} {target.get('currency')}) — proposal {proposal['proposal_id']} is PENDING human approval."
+            )
+        else:
+            lines.append("No eligible held PayPal authorizations awaiting capture.")
+
     if "refund" in lowered:
         captured_rows = [
-            r for r in (pending.get("transactions") or [])
-            if r.get("status") == "CAPTURED" and r.get("capture_id")
+            r for r in pp_rows
+            if r.get("status") == "CAPTURED" and r.get("capture_id") and r.get("capture_id") not in refunded_caps
         ]
         if captured_rows:
             target = captured_rows[0]
@@ -94,13 +160,30 @@ def _fallback_reply(user_text: str) -> dict[str, Any]:
             })
             tool_trace.append({"tool": "propose_refund", "result_summary": proposal["proposal_id"]})
             lines.append(
-                f"Proposed refund of capture {target['capture_id']} (amount {target.get('amount')} {target.get('currency')}) — proposal {proposal['proposal_id']} is PENDING human approval."
+                f"Proposed REFUND of capture {target['capture_id']} ({target.get('amount')} {target.get('currency')}) — proposal {proposal['proposal_id']} is PENDING human approval."
             )
         else:
-            lines.append("No captured payments on file to refund.")
-    lines.append(
-        "Proposals require a human approval click — the agent never moves money alone."
-    )
+            lines.append("No unrefunded captured PayPal payments on file to refund.")
+
+    if "dispute" in lowered or "evidence" in lowered:
+        disp_info = execute_tool("list_disputes_and_events", {})
+        tool_trace.append({"tool": "list_disputes_and_events", "result_summary": f"{disp_info.get('dispute_count', 0)} disputes"})
+        disputes = disp_info.get("disputes") or []
+        if disputes:
+            for d in disputes[:3]:
+                amt_obj = d.get("disputed_amount") or {}
+                lines.append(
+                    f"- Dispute {d.get('dispute_id')}: {d.get('reason')} ({amt_obj.get('value', '?')} {amt_obj.get('currency_code', 'USD')}), state {d.get('dispute_state') or d.get('status')}"
+                )
+            first_did = disputes[0].get("dispute_id")
+            if first_did:
+                brief = execute_tool("draft_dispute_evidence", {"dispute_id": first_did})
+                tool_trace.append({"tool": "draft_dispute_evidence", "result_summary": str(first_did)})
+                lines.append(f"Compiled brief for {first_did}: {brief.get('summary')}")
+        else:
+            lines.append("No disputes on file. Use 'Simulate Dispute' above to inject a dispute event.")
+
+    lines.append("Proposals require a human approval click — the agent never moves money alone.")
     if not llm_available():
         lines.append("(Set LLM_API_KEY for full tool-calling narration; this reply is the deterministic fallback.)")
     return {"reply": "\n".join(lines), "tool_trace": tool_trace, "source": "DEMO_FALLBACK"}

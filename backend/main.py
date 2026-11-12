@@ -7,7 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .adapters.mock_adapter import MockMLAdapter
 from .adapters.real_adapter import probe, RealMLAdapter
+from .agent import loop as agent_loop
 from .agent.router import router as agent_router
+from .currency import format_amount
 from .metrics_loader import get_metrics as load_metrics
 from .paypal.router import router as paypal_router
 from .schemas import CopilotEvidence, CopilotResponse, Transaction
@@ -177,12 +179,12 @@ def _seed_initial_transactions():
 @app.get("/api/transactions")
 def list_transactions(limit: int = 50):
     _seed_initial_transactions()
-    return {"transactions": store.list_all(limit), "kind": "DEMO_SIMULATION"}
+    return {"transactions": store.list_combined(limit), "kind": "DEMO_SIMULATION"}
 
 
 @app.get("/api/transactions/{txn_id}")
 def get_transaction(txn_id: str):
-    rec = store.get(txn_id)
+    rec = store.get_any(txn_id)
     if not rec:
         raise HTTPException(status_code=404, detail="Not found")
     return rec
@@ -191,12 +193,11 @@ def get_transaction(txn_id: str):
 @app.post("/api/investigation/explain")
 def explain(body: CopilotEvidence):
     """Copilot explains ENGINE evidence. Never overrides the risk decision."""
-    # Try to use real LLM Data generator if available, else deterministic fallback
     try:
-        # Use existing explain evidence_from_features if available
+        usual = body.usual_amount if body.usual_amount and body.usual_amount > 0 else 1.0
+        currency = (body.currency or "INR").upper()
         rules_text = ", ".join(body.triggered_rules) if body.triggered_rules else "none"
-        # Determine fraud type from amount deviation
-        if body.transaction_amount > body.usual_amount * 3 and body.new_device:
+        if body.transaction_amount > usual * 3 and body.new_device:
             fraud_type = "ACCOUNT_TAKEOVER"
         elif body.recent_transaction_count >= 5:
             fraud_type = "VELOCITY_ABUSE"
@@ -206,31 +207,80 @@ def explain(body: CopilotEvidence):
             fraud_type = "GEO_ANOMALY"
         else:
             fraud_type = "BEHAVIORAL_ANOMALY"
-        # Risk from xgb score
+
         xgb = body.xgboost_score
-        if xgb >= 0.7:
+        if xgb >= 0.7 or len(body.triggered_rules) >= 2:
             risk = "HIGH"
-            action = "BLOCK and investigate — multiple strong signals"
-        elif xgb >= 0.4:
+            action = "BLOCK / VOID and investigate — multiple strong signals"
+        elif xgb >= 0.4 or body.anomaly_score >= 0.4 or body.triggered_rules:
             risk = "MEDIUM"
-            action = "STEP-UP verification (OTP / biometric)"
+            action = "STEP-UP verification (OTP / analyst check)"
         else:
             risk = "LOW"
             action = "APPROVE — no further action"
-        summary = (
-            f"This transaction was flagged because amount deviation is {body.transaction_amount/body.usual_amount:.1f}× vs usual, "
+
+        amt_str = format_amount(body.transaction_amount, currency)
+        usual_str = format_amount(body.usual_amount, currency)
+        evidence_lines = [
+            f"Amount {amt_str} vs usual {usual_str}",
+            f"Device {'new' if body.new_device else 'known'}",
+            f"Velocity {body.recent_transaction_count} recent",
+            f"XGB {xgb:.3f}, Anomaly {body.anomaly_score:.2f}",
+        ]
+        deterministic_summary = (
+            f"This {body.gateway + ' ' if body.gateway else ''}transaction ({amt_str}) was evaluated because amount deviation is "
+            f"{body.transaction_amount / usual:.1f}× vs usual ({usual_str}), "
             f"device is {'new' if body.new_device else 'known'}, location distance {body.location_distance_km:.0f}km, "
-            f"velocity {body.recent_transaction_count} recent, XGB {xgb:.2f}, anomaly {body.anomaly_score:.2f}. "
+            f"velocity {body.recent_transaction_count} recent, XGB {xgb:.3f}, anomaly {body.anomaly_score:.2f}. "
             f"Rules: {rules_text}. This explanation does not set the risk score — the risk engine does."
         )
+
+        source = "DEMO_FALLBACK"
+        summary = deterministic_summary
+        if agent_loop.llm_available():
+            try:
+                cfg = agent_loop.llm_config()
+                msg = agent_loop._chat(
+                    cfg["base_url"],
+                    cfg["api_key"],
+                    cfg["model"],
+                    [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Explain the payment risk telemetry concisely in 2-3 sentences. "
+                                "Never contradict the engine score and end with: "
+                                "'This explanation does not set the risk score — the risk engine does.'"
+                            ),
+                        },
+                        {"role": "user", "content": deterministic_summary},
+                    ],
+                )
+                llm_text = (msg.get("content") or "").strip()
+                if llm_text:
+                    if "does not set the risk score" not in llm_text:
+                        llm_text = llm_text.rstrip() + " This explanation does not set the risk score — the risk engine does."
+                    summary = llm_text
+                    source = "LIVE_LLM"
+            except Exception:
+                source = "DEMO_FALLBACK"
+
         return CopilotResponse(
-            risk_level=risk, fraud_type=fraud_type, summary=summary,
-            evidence=[f"Amount {body.transaction_amount} vs usual {body.usual_amount}", f"Device {'new' if body.new_device else 'known'}", f"Velocity {body.recent_transaction_count}", f"Anomaly {body.anomaly_score:.2f}"],
-            recommended_action=action, source="DEMO_FALLBACK",
+            risk_level=risk,
+            fraud_type=fraud_type,
+            summary=summary,
+            evidence=evidence_lines,
+            recommended_action=action,
+            source=source,  # type: ignore[arg-type]
         ).model_dump()
     except Exception as e:
         return CopilotResponse(
-            risk_level="MEDIUM", fraud_type="UNKNOWN", summary=f"Copilot fallback: {e}", evidence=[], recommended_action="INVESTIGATE", source="DEMO_FALLBACK"
+            risk_level="MEDIUM",
+            fraud_type="UNKNOWN",
+            summary=f"Copilot fallback: {e}. This explanation does not set the risk score — the risk engine does.",
+            evidence=[],
+            recommended_action="INVESTIGATE",
+            source="DEMO_FALLBACK",
         ).model_dump()
 
 

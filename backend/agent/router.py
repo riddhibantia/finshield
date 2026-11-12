@@ -69,33 +69,81 @@ def approve_action(action_id: str, body: ApproveRequest):
     cfg = pp.get_config()
     try:
         if kind == "CAPTURE":
-            result = pp.capture_authorization(action["authorization_id"], request_id=str(uuid.uuid4()), cfg=cfg)
+            auth_id = action.get("authorization_id") or ""
+            result = pp.capture_authorization(auth_id, request_id=str(uuid.uuid4()), cfg=cfg)
+            from ..paypal.mapper import DECISION_AUTO_CAPTURE, capture_id as capture_id_of
+
+            for i in store.list_intents(200):
+                if i.get("authorization_id") == auth_id:
+                    store.update_intent_status(
+                        i["id"],
+                        status="CAPTURED",
+                        decision=DECISION_AUTO_CAPTURE,
+                        capture_id=capture_id_of(result) or "",
+                    )
+                    break
         elif kind == "VOID":
-            result = pp.void_authorization(action["authorization_id"], request_id=str(uuid.uuid4()), cfg=cfg)
+            auth_id = action.get("authorization_id") or ""
+            result = pp.void_authorization(auth_id, request_id=str(uuid.uuid4()), cfg=cfg)
+            from ..paypal.mapper import DECISION_AUTO_VOID
+
+            for i in store.list_intents(200):
+                if i.get("authorization_id") == auth_id:
+                    store.update_intent_status(i["id"], status="VOIDED", decision=DECISION_AUTO_VOID)
+                    break
         elif kind == "REFUND":
+            cap_id = action.get("capture_id") or ""
             result = pp.refund_capture(
-                action["capture_id"],
+                cap_id,
                 amount=action.get("amount"),
                 currency=action.get("currency") or "USD",
                 note_to_payer=action.get("reason") or "Refund approved by FinShield analyst",
                 request_id=str(uuid.uuid4()),
                 cfg=cfg,
             )
+            for i in store.list_intents(200):
+                if i.get("capture_id") == cap_id:
+                    store.update_intent_status(i["id"], status="REFUNDED")
+                    break
         elif kind == "DISPUTE_EVIDENCE":
-            from ..paypal.router import build_evidence_draft
+            from ..paypal.router import _linked_intent_for_dispute, _normalize_dispute_payload, build_evidence_draft
 
             dispute_id = action.get("dispute_id") or ""
-            intent = None
-            for i in store.list_intents(50):
-                if i.get("capture_id"):
-                    intent = i
-                    break
-            draft = action.get("draft") or build_evidence_draft({"dispute_id": dispute_id}, intent)
+            raw_event: dict[str, Any] | None = None
+            dispute_res: dict[str, Any] = {"dispute_id": dispute_id}
+            for e in store.list_events(200):
+                if str(e.get("event_type", "")).startswith("CUSTOMER.DISPUTE"):
+                    try:
+                        parsed = json.loads(e["payload"])
+                    except Exception:
+                        continue
+                    norm = _normalize_dispute_payload(parsed)
+                    if norm.get("dispute_id") == dispute_id:
+                        raw_event = parsed
+                        dispute_res = norm
+                        break
+
+            intent = _linked_intent_for_dispute(dispute_res)
+            draft = action.get("draft") or build_evidence_draft(dispute_res, intent)
+            if isinstance(draft, str):
+                try:
+                    draft = json.loads(draft)
+                except Exception:
+                    pass
             evidences = [{
                 "evidence_type": "OTHER",
                 "notes": json.dumps(draft)[:4000],
             }]
-            result = pp.provide_dispute_evidence(dispute_id, evidences, request_id=str(uuid.uuid4()), cfg=cfg)
+            if raw_event and raw_event.get("simulate"):
+                result = {
+                    "status": "SIMULATED_EVIDENCE_SUBMITTED",
+                    "simulated": True,
+                    "dispute_id": dispute_id,
+                    "intent_id": (intent or {}).get("id"),
+                    "evidence_package": draft,
+                }
+            else:
+                result = pp.provide_dispute_evidence(dispute_id, evidences, request_id=str(uuid.uuid4()), cfg=cfg)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action kind {kind}")
     except pp.PayPalError as e:

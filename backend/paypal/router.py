@@ -7,6 +7,7 @@ analyst review) or auto-voids before any digital good is delivered.
 from __future__ import annotations
 
 import json
+import math
 import time
 import uuid
 from typing import Any
@@ -147,12 +148,19 @@ def create_order(body: OrderRequest):
     cfg = _cfg_or_503()
     scenario = body.scenario if body.scenario in SCENARIOS else "clean"
     base = SCENARIOS[scenario]
-    amount = body.amount or base["amount"]
+    raw_amount = body.amount if (body.amount is not None and str(body.amount).strip() != "") else base["amount"]
     currency = (body.currency or base["currency"]).upper()
     try:
-        float(amount)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="amount must be a decimal string like 42.00")
+        amt_val = float(raw_amount)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="amount must be a positive decimal like 42.00")
+    if not math.isfinite(amt_val) or amt_val <= 0:
+        raise HTTPException(status_code=400, detail="amount must be a positive decimal greater than 0")
+    amount = f"{amt_val:.2f}"
+
+    return_url = body.return_url or ""
+    cancel_base = return_url.split("?")[0] if return_url else ""
+    cancel_url = f"{cancel_base}?cancelled=1" if cancel_base else ""
 
     try:
         order = pp.create_order(
@@ -164,8 +172,8 @@ def create_order(body: OrderRequest):
             application_context={
                 "user_action": "PAY_NOW",
                 "shipping_preference": "NO_SHIPPING",
-                "return_url": body.return_url or "",
-                "cancel_url": (body.return_url or "").split("?")[0] if body.return_url else "",
+                "return_url": return_url,
+                "cancel_url": cancel_url,
             },
         )
     except pp.PayPalError as e:
@@ -185,6 +193,10 @@ def create_order(body: OrderRequest):
     }
     store.save_intent(record)
     approve_url = next((l["href"] for l in order.get("links", []) if l.get("rel") == "approve"), "")
+    if approve_url and "useraction=" not in approve_url:
+        # useraction=commit shows the one-click Pay screen instead of the
+        # multi-step review flow — fewer clicks, and it works everywhere.
+        approve_url += "&useraction=commit"
     return {
         "intent_id": intent_id,
         "paypal_order_id": order["id"],
@@ -259,6 +271,15 @@ def authorize_order(order_id: str, body: dict[str, Any] | None = None):
     else:
         status = "HELD_REVIEW"
 
+    score_payload = dict(score_dict)
+    score_payload["_telemetry"] = {
+        "buyer": payer,
+        "device_id": fc.device_id,
+        "location": txn.location,
+        "velocity": txn.velocity,
+        "merchant_category": txn.merchant_category,
+    }
+
     store.update_intent_status(
         intent["id"],
         status=status,
@@ -267,10 +288,30 @@ def authorize_order(order_id: str, body: dict[str, Any] | None = None):
         risk_level=score_dict["risk_level"],
         authorization_id=auth_id,
         capture_id=extra.get("capture_id"),
-        score_payload=score_dict,
+        score_payload=score_payload,
     )
     updated = store.get_intent(intent["id"]) or intent
     return _public_decision(updated, score_dict, decision, extra)
+
+
+@router.post("/orders/{order_id}/cancel")
+def cancel_order(order_id: str):
+    intent = store.get_intent_by_order(order_id) or store.get_intent(order_id)
+    if not intent:
+        raise HTTPException(status_code=404, detail="Unknown paypal order")
+    current = intent.get("status")
+    if current in ("ORDER_CREATED", "CANCELLED"):
+        updated = store.update_intent_status(intent["id"], status="CANCELLED") or intent
+        return {
+            "intent_id": updated["id"],
+            "paypal_order_id": updated.get("paypal_order_id"),
+            "status": "CANCELLED",
+        }
+    return {
+        "intent_id": intent["id"],
+        "paypal_order_id": intent.get("paypal_order_id"),
+        "status": current,
+    }
 
 
 # ------------------------------------------------------------------ intents
@@ -369,12 +410,24 @@ def _disputes_cached(cfg: pp.PayPalConfig) -> list[dict[str, Any]]:
     return disputes
 
 
+def _normalize_dispute_payload(raw: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    if isinstance(raw.get("resource"), dict) and raw["resource"].get("dispute_id"):
+        res = dict(raw["resource"])
+        if raw.get("simulate") and "simulate" not in res:
+            res["simulate"] = True
+        return res
+    return raw
+
+
 @router.get("/disputes")
 def list_disputes():
     cfg = _cfg_or_503()
     live = _disputes_cached(cfg)
     simulated = [
-        json.loads(e["payload"]) for e in store.list_events(200)
+        _normalize_dispute_payload(json.loads(e["payload"]))
+        for e in store.list_events(200)
         if e["event_type"].startswith("CUSTOMER.DISPUTE")
     ]
     seen: set[str] = set()
@@ -392,7 +445,7 @@ def get_dispute(dispute_id: str):
     cfg = _cfg_or_503()
     for e in store.list_events(200):
         if e["event_type"].startswith("CUSTOMER.DISPUTE"):
-            payload = json.loads(e["payload"])
+            payload = _normalize_dispute_payload(json.loads(e["payload"]))
             if payload.get("dispute_id") == dispute_id:
                 return payload
     try:
@@ -476,22 +529,23 @@ def build_evidence_draft(dispute: dict[str, Any], intent: dict[str, Any] | None)
 @router.post("/disputes/{dispute_id}/draft")
 def draft_dispute_evidence(dispute_id: str):
     cfg = _cfg_or_503()
-    try:
-        dispute = pp.get_dispute(dispute_id, cfg=cfg)
-    except pp.PayPalError:
-        dispute = None
-    resource = dispute or {"dispute_id": dispute_id}
-    if not resource.get("dispute_id"):
-        # maybe the caller passed the webhook event shape
-        resource = dispute.get("resource", {"dispute_id": dispute_id}) if dispute else resource
+    resource: dict[str, Any] | None = None
+    for e in store.list_events(200):
+        if e["event_type"].startswith("CUSTOMER.DISPUTE"):
+            payload = json.loads(e["payload"])
+            cand = payload.get("resource", {}) if isinstance(payload, dict) else {}
+            if (cand.get("dispute_id") or payload.get("dispute_id")) == dispute_id:
+                resource = cand or payload
+                break
+    if resource is None:
+        try:
+            dispute = pp.get_dispute(dispute_id, cfg=cfg)
+        except pp.PayPalError:
+            dispute = None
+        resource = dispute or {"dispute_id": dispute_id}
+        if isinstance(resource, dict) and not resource.get("dispute_id") and isinstance(resource.get("resource"), dict):
+            resource = resource["resource"]
     intent = _linked_intent_for_dispute(resource)
-    if intent is None:
-        for e in store.list_events(200):
-            if e["event_type"].startswith("CUSTOMER.DISPUTE"):
-                payload = json.loads(e["payload"])
-                if payload.get("resource", {}).get("dispute_id") == dispute_id:
-                    intent = _linked_intent_for_dispute(payload["resource"])
-                    break
     return build_evidence_draft(resource, intent)
 
 

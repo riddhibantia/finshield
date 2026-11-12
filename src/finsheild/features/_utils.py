@@ -25,7 +25,7 @@ def hour_of_day(ts: pd.Series) -> pd.Series:
 
 
 def day_of_week(ts: pd.Series) -> pd.Series:
-    return ts.dt.dayofweek
+    return ts.dt.day_of_week
 
 
 def is_offhours(hour: pd.Series, low: int = 2, high: int = 5) -> pd.Series:

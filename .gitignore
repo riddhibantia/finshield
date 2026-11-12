@@ -61,3 +61,6 @@ Thumbs.db
 # Secrets (never commit)
 .env
 .env.local
+
+# Desloppify local state
+.desloppify/

@@ -95,14 +95,20 @@ class FulfilmentContext:
 def build_ctx(fc: FulfilmentContext) -> dict[str, Any]:
     """ctx for the risk adapters, enriched with PayPal telemetry."""
     base = SCENARIOS.get(fc.scenario, SCENARIOS["clean"])
+    amt_engine = engine_amount(float(fc.amount or 0), fc.currency)
+    usual_engine = 3800.0
+    if str(fc.amount) == str(base["amount"]) and fc.currency.upper() == str(base["currency"]).upper():
+        amt_dev = float(base["amount_deviation"])
+    else:
+        amt_dev = round(amt_engine / usual_engine, 2)
     return {
         "scenario": "suspicious" if fc.scenario == "stolen_account" else "normal",
-        "amount_deviation": base["amount_deviation"],
+        "amount_deviation": amt_dev,
         "recent_transaction_count": base["recent_transaction_count"],
         "is_new_device": base["is_new_device"],
         "is_shared_device": base["is_shared_device"],
         "distance_km": base["distance_km"],
-        "usual_amount": 3800.0,  # engine baseline (INR-equivalent scale)
+        "usual_amount": usual_engine,  # engine baseline (INR-equivalent scale)
         "gateway": "PayPal",
         "paypal_order_id": fc.custom_id or None,
         "email_hash": fc.email_hash,

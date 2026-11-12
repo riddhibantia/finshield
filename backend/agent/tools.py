@@ -4,6 +4,7 @@ that touches PayPal money is POST /api/agent/actions/{id}/approve, and a
 dedicated test asserts the refund path is unreachable from this loop."""
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
@@ -95,6 +96,14 @@ TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_disputes_and_events",
+            "description": "List recent dispute events and human-approval queue items on file.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 
@@ -133,15 +142,63 @@ def _risk_records() -> list[dict[str, Any]]:
     return records
 
 
+def _find_intent_for_auth(auth_id: str | None) -> dict[str, Any] | None:
+    if not auth_id:
+        return None
+    for intent in store.list_intents(200):
+        if intent.get("authorization_id") == auth_id:
+            return intent
+    return None
+
+
+def _disputes_on_file() -> list[dict[str, Any]]:
+    from ..paypal.router import _normalize_dispute_payload
+
+    seen: set[str] = set()
+    disputes: list[dict[str, Any]] = []
+    for e in store.list_events(200):
+        if str(e.get("event_type", "")).startswith("CUSTOMER.DISPUTE"):
+            raw = e.get("payload")
+            if isinstance(raw, str):
+                try:
+                    raw = json.loads(raw)
+                except Exception:
+                    continue
+            norm = _normalize_dispute_payload(raw)
+            did = str(norm.get("dispute_id") or "")
+            if did and did not in seen:
+                seen.add(did)
+                disputes.append(norm)
+    return disputes
+
+
 def propose(action: dict[str, Any]) -> dict[str, Any]:
     """Create a PENDING action row. The ONLY writer of executable actions."""
+    kind = action["kind"]
+    auth_id = action.get("authorization_id")
+    cap_id = action.get("capture_id")
+    dispute_id = action.get("dispute_id")
+    for existing in store.list_actions(status="PENDING", limit=200):
+        if (
+            existing.get("kind") == kind
+            and existing.get("authorization_id") == auth_id
+            and existing.get("capture_id") == cap_id
+            and existing.get("dispute_id") == dispute_id
+        ):
+            return {
+                "proposal_id": existing["id"],
+                "status": "PENDING",
+                "approval_required": True,
+                "message": "Proposal recorded. Nothing moves until a human approves it.",
+            }
+
     record = {
         "id": f"ACT-{uuid.uuid4().hex[:10].upper()}",
-        "kind": action["kind"],
+        "kind": kind,
         "status": "PENDING",
-        "authorization_id": action.get("authorization_id"),
-        "capture_id": action.get("capture_id"),
-        "dispute_id": action.get("dispute_id"),
+        "authorization_id": auth_id,
+        "capture_id": cap_id,
+        "dispute_id": dispute_id,
         "amount": action.get("amount"),
         "currency": action.get("currency"),
         "reason": action.get("reason") or "",
@@ -149,8 +206,12 @@ def propose(action: dict[str, Any]) -> dict[str, Any]:
         "created_at": now_iso(),
     }
     saved = store.save_action(record)
-    return {"proposal_id": saved["id"], "status": "PENDING", "approval_required": True,
-            "message": "Proposal recorded. Nothing moves until a human approves it."}
+    return {
+        "proposal_id": saved["id"],
+        "status": "PENDING",
+        "approval_required": True,
+        "message": "Proposal recorded. Nothing moves until a human approves it.",
+    }
 
 
 def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -169,40 +230,54 @@ def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return {"error": f"no risk record for {txn_id}"}
 
     if name == "propose_capture":
-        return propose({"kind": "CAPTURE", "authorization_id": args.get("authorization_id"),
-                        "reason": args.get("reason") or "Agent proposes capture after review"})
+        auth_id = args.get("authorization_id")
+        intent = _find_intent_for_auth(auth_id)
+        return propose({
+            "kind": "CAPTURE",
+            "authorization_id": auth_id,
+            "amount": (intent or {}).get("amount"),
+            "currency": (intent or {}).get("currency") or "USD",
+            "reason": args.get("reason") or "Agent proposes capture after review",
+        })
 
     if name == "propose_void":
-        return propose({"kind": "VOID", "authorization_id": args.get("authorization_id"),
-                        "reason": args.get("reason") or "Agent proposes void before delivery"})
+        auth_id = args.get("authorization_id")
+        intent = _find_intent_for_auth(auth_id)
+        return propose({
+            "kind": "VOID",
+            "authorization_id": auth_id,
+            "amount": (intent or {}).get("amount"),
+            "currency": (intent or {}).get("currency") or "USD",
+            "reason": args.get("reason") or "Agent proposes void before delivery",
+        })
 
     if name == "propose_refund":
-        return propose({"kind": "REFUND", "capture_id": args.get("capture_id"),
-                        "amount": args.get("amount"), "currency": args.get("currency", "USD"),
-                        "reason": args.get("reason") or "Agent proposes refund"})
+        return propose({
+            "kind": "REFUND",
+            "capture_id": args.get("capture_id"),
+            "amount": args.get("amount"),
+            "currency": args.get("currency", "USD"),
+            "reason": args.get("reason") or "Agent proposes refund",
+        })
 
     if name == "draft_dispute_evidence":
-        from ..paypal.router import build_evidence_draft
+        from ..paypal.router import _linked_intent_for_dispute, build_evidence_draft
 
         dispute_id = str(args.get("dispute_id", ""))
-        from ..paypal import client as pp
-
-        intent = None
-        for e in store.list_events(200):
-            if e["event_type"].startswith("CUSTOMER.DISPUTE"):
-                payload = e["payload"]
-                try:
-                    payload = payload if isinstance(payload, dict) else __import__("json").loads(payload)
-                except Exception:
-                    continue
-                resource = payload.get("resource", {})
-                if resource.get("dispute_id") == dispute_id:
-                    from ..paypal.router import _linked_intent_for_dispute
-
-                    intent = _linked_intent_for_dispute(resource)
-                    break
+        resource = next((d for d in _disputes_on_file() if d.get("dispute_id") == dispute_id), {"dispute_id": dispute_id})
+        intent = _linked_intent_for_dispute(resource)
         if intent is None:
             intent = store.get_intent_by_order(dispute_id) or store.get_intent(dispute_id)
-        return build_evidence_draft({"dispute_id": dispute_id}, intent)
+        return build_evidence_draft(resource, intent)
+
+    if name == "list_disputes_and_events":
+        disputes = _disputes_on_file()
+        actions = store.list_actions(limit=50)
+        return {
+            "dispute_count": len(disputes),
+            "disputes": disputes[:10],
+            "pending_actions": len([a for a in actions if a.get("status") == "PENDING"]),
+            "actions": actions[:10],
+        }
 
     return {"error": f"unknown tool {name}"}

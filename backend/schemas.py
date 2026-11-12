@@ -68,6 +68,8 @@ class CopilotEvidence(BaseModel):
     anomaly_score: float
     triggered_rules: list[str] = []
     graph_signals: dict = {}
+    currency: str = "INR"
+    gateway: str = ""
 
 
 class CopilotResponse(BaseModel):

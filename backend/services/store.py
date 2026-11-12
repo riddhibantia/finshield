@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import json
 import random
 from datetime import datetime, timezone
 
+from ..paypal import store as pp_store
+from ..paypal.mapper import SCENARIOS as PP_SCENARIOS, evidence_for
+from ..paypal.reasons import public_rules
 from ..schemas import Transaction
 
 _counter = itertools.count(10042)
@@ -73,8 +77,191 @@ def get(txn_id: str) -> dict | None:
     return _store.get(txn_id)
 
 
+def _fmt_currency(amount: float, currency: str = "INR") -> str:
+    cur = (currency or "INR").upper()
+    if cur == "USD":
+        return f"${amount:,.2f} USD"
+    if cur == "INR":
+        return f"₹{amount:,.2f}"
+    return f"{amount:,.2f} {cur}"
+
+
+def paypal_intent_to_record(intent: dict, include_unscored: bool = False) -> dict | None:
+    """Convert a SQLite paypal_intents row into the standard {transaction, context, score} contract."""
+    if not intent:
+        return None
+    raw_score = intent.get("score_payload")
+    score_dict: dict = {}
+    if isinstance(raw_score, str) and raw_score:
+        try:
+            score_dict = json.loads(raw_score)
+        except Exception:
+            score_dict = {}
+    elif isinstance(raw_score, dict):
+        score_dict = dict(raw_score)
+
+    has_score = bool(score_dict) or (intent.get("risk_score") is not None)
+    if not has_score and not include_unscored:
+        return None
+
+    req_raw = intent.get("request_payload")
+    req_payload: dict = {}
+    if isinstance(req_raw, str) and req_raw:
+        try:
+            req_payload = json.loads(req_raw)
+        except Exception:
+            req_payload = {}
+    elif isinstance(req_raw, dict):
+        req_payload = req_raw
+
+    tx_id = str(intent.get("id") or f"PP-{intent.get('paypal_order_id') or 'INTENT'}")
+    scenario = str(intent.get("scenario") or "clean")
+    base_sc = PP_SCENARIOS.get(scenario, PP_SCENARIOS["clean"])
+    telemetry = score_dict.get("_telemetry") if isinstance(score_dict.get("_telemetry"), dict) else {}
+    buyer = telemetry.get("buyer") if isinstance(telemetry.get("buyer"), dict) else {}
+
+    amt = float(intent.get("amount") or base_sc.get("amount") or 0.0)
+    currency = str(intent.get("currency") or "USD").upper()
+    dev_id = str(
+        telemetry.get("device_id")
+        or req_payload.get("device_id")
+        or ("DEV-NEW-PAYPAL" if base_sc.get("is_new_device") else "DEV-KNOWN-PAYPAL")
+    )
+    is_new = bool(base_sc.get("is_new_device") or "NEW" in dev_id.upper())
+    is_shared = bool(base_sc.get("is_shared_device") or "SHARED" in dev_id.upper())
+    location = str(
+        telemetry.get("location")
+        or ("400km from home" if float(base_sc.get("distance_km", 0) or 0) >= 300 else "Verified PayPal Region")
+    )
+    velocity = int(telemetry.get("velocity") or base_sc.get("recent_transaction_count") or 1)
+    user_id = str(
+        buyer.get("email")
+        or buyer.get("payer_id")
+        or req_payload.get("email")
+        or req_payload.get("user_id")
+        or f"PAYPAL-{str(intent.get('paypal_order_id') or tx_id)[-6:]}"
+    )
+
+    risk_score = float(
+        score_dict.get("risk_score")
+        if score_dict.get("risk_score") is not None
+        else (intent.get("risk_score") or 0.05)
+    )
+    risk_level = str(
+        score_dict.get("risk_level")
+        or intent.get("risk_level")
+        or ("CRITICAL" if risk_score >= 0.8 else "HIGH" if risk_score >= 0.6 else "MEDIUM" if risk_score >= 0.3 else "LOW")
+    )
+    sanitized_rules = public_rules(list(score_dict.get("rules") or []))
+    sanitized_evidence = evidence_for(score_dict, amt, currency) if score_dict else [
+        f"PayPal order {intent.get('paypal_order_id')} status: {intent.get('status') or 'ORDER_CREATED'}"
+    ]
+    # Avoid duplicating FX note if score_dict already has sanitized evidence from an earlier read
+    if score_dict and any("normalised at demo rate" in str(x) for x in (score_dict.get("evidence") or [])):
+        sanitized_evidence = sanitized_evidence[:-1]
+
+    signals = list(score_dict.get("signals") or [
+        {"name": "amount_deviation", "value": float(base_sc.get("amount_deviation", 0.3)), "contribution": round(min(0.35, risk_score * 0.35), 3)},
+        {"name": "velocity", "value": float(velocity), "contribution": 0.24 if velocity >= 5 else 0.03},
+    ])
+
+    raw_payload = {
+        "gateway": "PayPal",
+        "intent_id": tx_id,
+        "paypal_order_id": intent.get("paypal_order_id"),
+        "authorization_id": intent.get("authorization_id"),
+        "capture_id": intent.get("capture_id"),
+        "status": intent.get("status"),
+        "decision": intent.get("decision"),
+        "scenario": scenario,
+        "amount": intent.get("amount"),
+        "currency": currency,
+        "buyer": buyer,
+        "device_id": dev_id,
+    }
+
+    sim_scenario = "fraud_ring" if is_shared else ("suspicious" if scenario in ("review", "stolen_account") else "normal")
+
+    return {
+        "transaction": {
+            "transaction_id": tx_id,
+            "user_id": user_id,
+            "amount": amt,
+            "currency": currency,
+            "timestamp": str(intent.get("updated_at") or intent.get("created_at") or ""),
+            "merchant": "FinShield Digital Goods",
+            "merchant_category": str(telemetry.get("merchant_category") or base_sc.get("merchant_category") or "digital_gateway"),
+            "device_id": dev_id,
+            "location": location,
+            "velocity": velocity,
+            "channel": "PAYPAL",
+            "gateway": "PayPal",
+            "raw_payload": raw_payload,
+        },
+        "context": {
+            "scenario": sim_scenario,
+            "paypal_scenario": scenario,
+            "gateway": "PayPal",
+            "paypal_order_id": intent.get("paypal_order_id"),
+            "authorization_id": intent.get("authorization_id"),
+            "capture_id": intent.get("capture_id"),
+            "status": intent.get("status"),
+            "decision": intent.get("decision"),
+            "is_new_device": is_new,
+            "is_shared_device": is_shared,
+            "shared_device_accounts": 4 if is_shared else 1,
+            "buyer": buyer,
+            "usual_amount": round(3800.0 / 83.5, 2) if currency == "USD" else 3800.0,
+        },
+        "score": {
+            "transaction_id": tx_id,
+            "risk_score": round(risk_score, 3),
+            "risk_level": risk_level,
+            "signals": signals,
+            "rules": sanitized_rules,
+            "behavioral_score": float(score_dict.get("behavioral_score") or 0.1),
+            "anomaly_score": float(score_dict.get("anomaly_score") or 0.1),
+            "xgb_score": score_dict.get("xgb_score"),
+            "graph_score": score_dict.get("graph_score"),
+            "evidence": sanitized_evidence,
+            "source": str(score_dict.get("source") or "DEMO_FALLBACK"),
+        },
+    }
+
+
+def get_any(txn_id: str) -> dict | None:
+    rec = _store.get(txn_id)
+    if rec:
+        return rec
+    intent = pp_store.get_intent(txn_id) or pp_store.get_intent_by_order(txn_id)
+    if not intent and txn_id.startswith("PP-"):
+        intent = pp_store.get_intent_by_order(txn_id[3:])
+    if intent:
+        return paypal_intent_to_record(intent, include_unscored=True)
+    return None
+
+
 def list_all(limit: int = 50) -> list[dict]:
     return list(reversed(list(_store.values())))[:limit]
+
+
+def list_combined(limit: int = 50) -> list[dict]:
+    seen: set[str] = set()
+    rows: list[dict] = []
+    for intent in pp_store.list_intents(limit):
+        rec = paypal_intent_to_record(intent, include_unscored=False)
+        if rec:
+            tid = str(rec["transaction"]["transaction_id"])
+            if tid not in seen:
+                seen.add(tid)
+                rows.append(rec)
+    for rec in list_all(limit):
+        tid = str((rec.get("transaction") or {}).get("transaction_id") or "")
+        if tid and tid not in seen:
+            seen.add(tid)
+            rows.append(rec)
+    rows.sort(key=lambda r: str((r.get("transaction") or {}).get("timestamp") or ""), reverse=True)
+    return rows[:limit]
 
 
 def reset() -> None:
@@ -83,18 +270,24 @@ def reset() -> None:
 
 def tokenize(user_id: str) -> dict:
     h = hashlib.sha256(("finsheild-salt::" + user_id).encode()).hexdigest()
+    short_tok = f"{h[:4]}...{h[-4:]}"
     return {
-        "user_token": f"{h[:4]}...{h[-4:]}",
+        "user_id": user_id,
+        "user_token": short_tok,
+        "token": short_tok,
         "phone": "••••••••42",
+        "phone_masked": "••••••••42",
         "document": "TOKENIZED",
+        "id_token": f"tok_{h[:6]}...",
         "status": "Verified",
+        "verification": "VERIFIED",
         "method": "Prototype identity tokenization (salted SHA-256, NOT a zero-knowledge proof)",
         "kind": "DEMO_SIMULATION",
     }
 
 
 def graph_for(txn_id: str) -> dict:
-    rec = _store.get(txn_id)
+    rec = get_any(txn_id)
     ctx = (rec or {}).get("context", {})
     txn = (rec or {}).get("transaction", {})
     score = (rec or {}).get("score", {})
@@ -105,12 +298,215 @@ def graph_for(txn_id: str) -> dict:
     merch = str(txn.get("merchant") or "Cashfree Payment Rail")
     merch_cat = str(txn.get("merchant_category") or "digital_gateway")
     amt = float(txn.get("amount") or 100.0)
+    currency = str(txn.get("currency") or "INR").upper()
     channel = str(txn.get("channel") or "UPI")
     gateway = str(txn.get("gateway") or "Cashfree")
+    is_paypal = gateway == "PayPal" or channel == "PAYPAL" or str(txn_id).startswith("PP-")
+    amt_str = _fmt_currency(amt, currency)
     risk_level = str(score.get("risk_level") or ("CRITICAL" if amt >= 100000 else "LOW"))
     risk_score = float(score.get("risk_score") or (0.89 if amt >= 100000 else 0.035))
     is_new = bool(ctx.get("is_new_device") or ("NEW" in dev_id) or ("CF" in dev_id))
+    is_shared = bool(ctx.get("is_shared_device") or ("SHARED" in dev_id) or ("DEV-X" in dev_id) or scenario == "fraud_ring")
     velocity = int(txn.get("velocity") or 1)
+
+    if is_paypal:
+        buyer = ctx.get("buyer") or {}
+        pp_status = str(ctx.get("status") or "AUTHORIZED")
+        pp_decision = str(ctx.get("decision") or "HOLD_FOR_REVIEW")
+        order_id = str(ctx.get("paypal_order_id") or str(txn_id).replace("PP-", ""))
+        auth_id = str(ctx.get("authorization_id") or "PENDING")
+        cap_id = str(ctx.get("capture_id") or "")
+        rules = list(score.get("rules") or [])
+        if is_shared or is_new or risk_score >= 0.6:
+            nodes = [
+                {
+                    "id": f"user:{u}",
+                    "label": u,
+                    "type": "user",
+                    "role": "PayPal Buyer Account",
+                    "risk": "SUSPICIOUS" if risk_score >= 0.6 else "SAFE",
+                    "details": {
+                        "buyer_handle": u,
+                        "payer_id": buyer.get("payer_id") or "SANDBOX_BUYER",
+                        "country": buyer.get("country") or "US",
+                        "profile_baseline": "$45.51 USD typical order",
+                    },
+                },
+                {
+                    "id": f"dev:{dev_id}",
+                    "label": dev_id,
+                    "type": "device",
+                    "role": "Shared Cluster Hardware" if is_shared else "Unrecognized Device",
+                    "risk": "CRITICAL",
+                    "details": {
+                        "device_id": dev_id,
+                        "linked_accounts": 4 if is_shared else 1,
+                        "burst_velocity": f"{velocity} attempts / 5m",
+                        "status": "SHARED_CLUSTER" if is_shared else "NEW_FINGERPRINT",
+                    },
+                },
+                {
+                    "id": "dev:BASELINE-PAYPAL",
+                    "label": "DEV-KNOWN-PAYPAL",
+                    "type": "device",
+                    "role": "Prior Trusted Device",
+                    "risk": "SAFE",
+                    "details": {
+                        "device_id": "DEV-KNOWN-PAYPAL",
+                        "status": "DORMANT (Bypassed on this order)",
+                    },
+                },
+                {
+                    "id": txn_id,
+                    "label": amt_str,
+                    "type": "transaction",
+                    "role": f"PayPal Hold ({risk_level})",
+                    "risk": risk_level,
+                    "details": {
+                        "intent_id": txn_id,
+                        "paypal_order_id": order_id,
+                        "authorization_id": auth_id,
+                        "amount": amt_str,
+                        "risk_score": risk_score,
+                        "decision": pp_decision,
+                        "fulfilment_status": pp_status,
+                        "rules": rules or ["HIGH_RISK_PATTERN"],
+                    },
+                },
+                {
+                    "id": "gw:PayPal",
+                    "label": "PayPal Orders v2 Switch",
+                    "type": "gateway",
+                    "role": "Authorization Hold Rail",
+                    "risk": "INFO",
+                    "details": {
+                        "gateway": "PayPal",
+                        "protocol": "Orders v2 (AUTHORIZE)",
+                        "paypal_order_id": order_id,
+                        "authorization_status": pp_status,
+                    },
+                },
+                {
+                    "id": f"merch:{merch[:14]}",
+                    "label": merch,
+                    "type": "merchant",
+                    "role": "Digital Storefront",
+                    "risk": "SAFE",
+                    "details": {
+                        "merchant_name": merch,
+                        "category": merch_cat,
+                        "digital_delivery": "Voided / Held before delivery" if pp_status != "CAPTURED" else "Delivered after capture",
+                    },
+                },
+            ]
+            if is_shared:
+                nodes.append({
+                    "id": "acct:CLUSTER-2",
+                    "label": "LINKED-ACCT-02",
+                    "type": "account",
+                    "role": "Shared Device Peer",
+                    "risk": "CRITICAL",
+                    "details": {
+                        "device_overlap": dev_id,
+                        "linked_order_volume": "$14,200.00 USD / 24h",
+                        "status": "WATCHLIST",
+                    },
+                })
+            edges = [
+                {"from": f"user:{u}", "to": txn_id, "label": "AUTHORIZES_HOLD", "is_suspicious": False},
+                {"from": f"user:{u}", "to": "dev:BASELINE-PAYPAL", "label": "USUAL_DEVICE", "is_suspicious": False},
+                {"from": f"dev:{dev_id}", "to": txn_id, "label": "SHARED_HARDWARE" if is_shared else "NEW_DEVICE_SESSION", "is_suspicious": True},
+                {"from": f"dev:{dev_id}", "to": "dev:BASELINE-PAYPAL", "label": "DEVICE_MISMATCH", "is_suspicious": True},
+                {"from": txn_id, "to": "gw:PayPal", "label": "HELD_AT_PAYPAL", "is_suspicious": False},
+                {"from": "gw:PayPal", "to": f"merch:{merch[:14]}", "label": f"GATE_{pp_decision}", "is_suspicious": pp_status == "VOIDED"},
+            ]
+            if is_shared:
+                edges.append({"from": "acct:CLUSTER-2", "to": f"dev:{dev_id}", "label": "CO_SHARED_DEVICE", "is_suspicious": True})
+            return {
+                "nodes": nodes,
+                "edges": edges,
+                "kind": "DEMO_SIMULATION",
+                "note": f"PayPal Fulfilment Topology: {pp_decision} gated order {order_id} ({amt_str}) before digital delivery.",
+                "summary": {
+                    "topology_type": "PayPal Shared-Device Cluster" if is_shared else "PayPal New-Device Hold",
+                    "connected_entities": len(nodes),
+                    "anomalous_edges": sum(1 for e in edges if e["is_suspicious"]),
+                    "shared_clique_detected": is_shared,
+                },
+            }
+
+        return {
+            "nodes": [
+                {
+                    "id": f"user:{u}",
+                    "label": u,
+                    "type": "user",
+                    "role": "Verified PayPal Buyer",
+                    "risk": "SAFE" if risk_score < 0.3 else "SUSPICIOUS",
+                    "details": {
+                        "buyer_handle": u,
+                        "payer_id": buyer.get("payer_id") or "SANDBOX_BUYER",
+                        "country": buyer.get("country") or "US",
+                        "status": "VERIFIED",
+                    },
+                },
+                {
+                    "id": f"dev:{dev_id}",
+                    "label": dev_id,
+                    "type": "device",
+                    "role": "Paired Buyer Device",
+                    "risk": "SAFE",
+                    "details": {"device_id": dev_id, "trust_score": 0.96},
+                },
+                {
+                    "id": txn_id,
+                    "label": amt_str,
+                    "type": "transaction",
+                    "role": f"PayPal Authorization ({pp_status})",
+                    "risk": risk_level,
+                    "details": {
+                        "intent_id": txn_id,
+                        "paypal_order_id": order_id,
+                        "authorization_id": auth_id,
+                        "capture_id": cap_id or "—",
+                        "amount": amt_str,
+                        "risk_score": risk_score,
+                        "decision": pp_decision,
+                    },
+                },
+                {
+                    "id": "gw:PayPal",
+                    "label": "PayPal Orders v2 Switch",
+                    "type": "gateway",
+                    "role": "Authorization & Capture Rail",
+                    "risk": "INFO",
+                    "details": {"gateway": "PayPal", "protocol": "PayPal REST Orders v2", "status": pp_status},
+                },
+                {
+                    "id": f"merch:{merch[:14]}",
+                    "label": merch,
+                    "type": "merchant",
+                    "role": "Digital Storefront",
+                    "risk": "SAFE",
+                    "details": {"merchant_name": merch, "category": merch_cat, "fulfilment": pp_status},
+                },
+            ],
+            "edges": [
+                {"from": f"user:{u}", "to": f"dev:{dev_id}", "label": "PAIRED_DEVICE", "is_suspicious": False},
+                {"from": f"user:{u}", "to": txn_id, "label": "AUTHORIZES_HOLD", "is_suspicious": False},
+                {"from": f"dev:{dev_id}", "to": txn_id, "label": "SIGNED_SESSION", "is_suspicious": False},
+                {"from": txn_id, "to": "gw:PayPal", "label": "ROUTES_VIA", "is_suspicious": False},
+                {"from": "gw:PayPal", "to": f"merch:{merch[:14]}", "label": f"GATE_{pp_decision}", "is_suspicious": False},
+            ],
+            "kind": "DEMO_SIMULATION",
+            "note": f"PayPal Checkout Path: order {order_id} scored {risk_score:.3f} ({risk_level}) -> {pp_status}.",
+            "summary": {
+                "topology_type": "PayPal Verified Checkout",
+                "connected_entities": 5,
+                "anomalous_edges": 0,
+                "shared_clique_detected": False,
+            },
+        }
 
     if scenario == "fraud_ring":
         return {
@@ -294,7 +690,7 @@ def graph_for(txn_id: str) -> dict:
                         "transaction_id": txn_id,
                         "amount": f"₹{amt:,.2f}",
                         "risk_score": risk_score,
-                        "rules": ["BURST_VELOCITY", "NEW_DEVICE_HIGH_VALUE", "UPI_HIGH_VALUE_ANOMALY"],
+                        "rules": list(score.get("rules") or ["BURST_VELOCITY", "NEW_DEVICE_HIGH_VALUE"]),
                         "decision": "BLOCK" if risk_score > 0.7 else "STEP_UP"
                     }
                 },
@@ -306,7 +702,7 @@ def graph_for(txn_id: str) -> dict:
                     "risk": "INFO",
                     "details": {
                         "gateway": gateway,
-                        "order_id": ctx.get("order_id", "CFPay_100K_LIVE"),
+                        "order_id": ctx.get("order_id", "CFPay_EXAMPLE"),
                         "cf_payment_id": ctx.get("cf_payment_id", txn_id.replace("CF-", "")),
                         "payment_status": "SUCCESS_ROUTED"
                     }
@@ -335,7 +731,7 @@ def graph_for(txn_id: str) -> dict:
                 {"from": f"gw:{gateway}", "to": f"merch:{merch[:14]}", "label": "SETTLES_ESCROW", "is_suspicious": False},
             ],
             "kind": "DEMO_SIMULATION",
-            "note": "Ingress Anomaly: Transaction originated from unrecognized hardware (DEV-NEW-CF) bypassing authorized baseline device.",
+            "note": f"Ingress Anomaly: Transaction originated from unrecognized hardware ({dev_id}) bypassing authorized baseline device.",
             "summary": {
                 "topology_type": "Account Takeover / New Hardware Ingress",
                 "connected_entities": 7,
